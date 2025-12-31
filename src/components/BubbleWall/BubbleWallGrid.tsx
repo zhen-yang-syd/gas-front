@@ -44,7 +44,7 @@ export function BubbleWallGrid({
   bubbles,
   globalThresholds,
   maxDisplay = 24,
-  columns = 6,
+  columns: _columns = 6,  // eslint-disable-line @typescript-eslint/no-unused-vars
 }: BubbleWallGridProps) {
   // 限制显示数量
   const displayBubbles = bubbles.slice(0, maxDisplay);
@@ -115,16 +115,14 @@ export function BubbleWallGrid({
         </span>
       </div>
 
-      {/* 气泡墙图网格 */}
+      {/* 气泡墙图网格 - 使用 flex-wrap 自动换行，无滚动 */}
       {displayBubbles.length > 0 ? (
-        <div
-          className="grid gap-2"
-          style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
-        >
+        <div className="flex flex-wrap gap-1.5 justify-center">
           {displayBubbles.map((bubble, index) => (
             <div
               key={`${bubble.label}-${index}`}
-              className="flex justify-center"
+              className="shrink-0"
+              style={{ width: "55px" }}
             >
               <BubbleWallChart
                 label={bubble.label}

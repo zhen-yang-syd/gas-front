@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* 工业字体 - 通过 next/font/google 在 layout.tsx 中加载 */
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -44,82 +46,470 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  /* ====== 工业主题 - 深色背景 ====== */
+  --color-base: #0a0e17;            /* 最深背景 - 用 bg-base */
+  --color-surface: #111827;         /* 卡片背景 - 用 bg-surface */
+  --color-overlay: #1a2332;         /* 弹出层背景 - 用 bg-overlay */
+  --color-tertiary: #1a2332;        /* 第三层背景 - 用 bg-tertiary */
+  --color-raised: #243044;          /* 高亮背景 - 用 bg-raised */
+
+  /* ====== 工业主题 - 边框 ====== */
+  --color-edge: #1e3a5f;            /* 主边框 - 用 border-edge */
+  --color-edge-light: #2d4a6f;      /* 次边框 - 用 border-edge-light */
+
+  /* ====== 工业主题 - 独立文字颜色 ====== */
+  --color-dim: #9ca3af;             /* 最弱文字 */
+  --color-soft: #cbd5e1;            /* 次要文字 */
+  --color-bright: #f1f5f9;          /* 主要文字 */
+  --color-glow: #38bdf8;            /* 强调文字 */
+
+  /* 状态颜色 */
+  --color-ok: #4ade80;              /* 正常：亮绿 */
+  --color-warn: #fbbf24;            /* 警告：亮黄 */
+  --color-err: #f87171;             /* 危险：亮红 */
+  --color-note: #38bdf8;            /* 信息：亮蓝 */
+
+  /* 传感器类型 */
+  --color-t-sensor: #22d3ee;        /* T传感器 */
+  --color-wd-sensor: #60a5fa;       /* WD传感器 */
+  --color-fs-sensor: #fb923c;       /* FS传感器 */
 }
+
+/* =====================================================
+   工业科技风主题 - SCADA/NASA控制中心风格
+   ===================================================== */
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.375rem;
+
+  /* 工业字体 */
+  --font-display: var(--font-orbitron), sans-serif;
+  --font-mono: var(--font-jetbrains-mono), monospace;
+  --font-body: var(--font-inter), sans-serif;
+
+  /* 背景层次 - 深蓝黑主题 */
+  --bg-primary: #0a0e17;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1a2332;
+  --bg-elevated: #243044;
+
+  /* 边框 */
+  --border-primary: #1e3a5f;
+  --border-secondary: #2d4a6f;
+  --border-accent: #0ea5e9;
+  --border-glow: rgba(14, 165, 233, 0.3);
+
+  /* 文字 - 提高对比度确保可读性 */
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;  /* 提亮：原 #94a3b8 */
+  --text-muted: #9ca3af;      /* 提亮：原 #64748b */
+  --text-accent: #0ea5e9;
+
+  /* 状态色 - 高饱和度工业色 */
+  --status-normal: #22c55e;
+  --status-normal-dim: rgba(34, 197, 94, 0.2);
+  --status-warning: #f59e0b;
+  --status-warning-dim: rgba(245, 158, 11, 0.2);
+  --status-danger: #ef4444;
+  --status-danger-dim: rgba(239, 68, 68, 0.2);
+  --status-info: #0ea5e9;
+  --status-info-dim: rgba(14, 165, 233, 0.2);
+
+  /* 传感器类型色 */
+  --sensor-t: #06b6d4;
+  --sensor-t-dim: rgba(6, 182, 212, 0.2);
+  --sensor-wd: #3b82f6;
+  --sensor-wd-dim: rgba(59, 130, 246, 0.2);
+  --sensor-fs: #f97316;
+  --sensor-fs-dim: rgba(249, 115, 22, 0.2);
+
+  /* 相关性连线色 */
+  --correlation-tt: #06b6d4;
+  --correlation-twd: #3b82f6;
+  --correlation-tfs: #1e3a5f;
+
+  /* 发光效果 */
+  --glow-blue: 0 0 20px rgba(14, 165, 233, 0.4);
+  --glow-green: 0 0 20px rgba(34, 197, 94, 0.4);
+  --glow-red: 0 0 20px rgba(239, 68, 68, 0.4);
+  --glow-yellow: 0 0 20px rgba(245, 158, 11, 0.4);
+
+  /* shadcn/ui 变量映射 - 深蓝黑主题 */
+  --background: #0a0e17;
+  --foreground: #f1f5f9;
+  --card: #111827;
+  --card-foreground: #f1f5f9;
+  --popover: #1a2332;
+  --popover-foreground: #f1f5f9;
+  --primary: #0ea5e9;
+  --primary-foreground: #0a0e17;
+  --secondary: #1e3a5f;
+  --secondary-foreground: #f1f5f9;
+  --muted: #1a2332;
+  --muted-foreground: #64748b;
+  --accent: #1e3a5f;
+  --accent-foreground: #f1f5f9;
+  --destructive: #ef4444;
+  --border: #1e3a5f;
+  --input: #1e3a5f;
+  --ring: #0ea5e9;
+
+  /* 图表色 - 工业仪表风格 */
+  --chart-1: #06b6d4;
+  --chart-2: #3b82f6;
+  --chart-3: #22c55e;
+  --chart-4: #f59e0b;
+  --chart-5: #ef4444;
+
+  --sidebar: #0a0e17;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #0ea5e9;
+  --sidebar-primary-foreground: #0a0e17;
+  --sidebar-accent: #1e3a5f;
+  --sidebar-accent-foreground: #f1f5f9;
+  --sidebar-border: #1e3a5f;
+  --sidebar-ring: #0ea5e9;
 }
 
+/* Dark mode is the default for industrial theme */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #0a0e17;
+  --foreground: #f1f5f9;
+  --card: #111827;
+  --card-foreground: #f1f5f9;
+  --popover: #1a2332;
+  --popover-foreground: #f1f5f9;
+  --primary: #0ea5e9;
+  --primary-foreground: #0a0e17;
+  --secondary: #1e3a5f;
+  --secondary-foreground: #f1f5f9;
+  --muted: #1a2332;
+  --muted-foreground: #64748b;
+  --accent: #1e3a5f;
+  --accent-foreground: #f1f5f9;
+  --destructive: #ef4444;
+  --border: #1e3a5f;
+  --input: #1e3a5f;
+  --ring: #0ea5e9;
+  --chart-1: #06b6d4;
+  --chart-2: #3b82f6;
+  --chart-3: #22c55e;
+  --chart-4: #f59e0b;
+  --chart-5: #ef4444;
+  --sidebar: #0a0e17;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: #0ea5e9;
+  --sidebar-primary-foreground: #0a0e17;
+  --sidebar-accent: #1e3a5f;
+  --sidebar-accent-foreground: #f1f5f9;
+  --sidebar-border: #1e3a5f;
+  --sidebar-ring: #0ea5e9;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body);
   }
+}
+
+/* =====================================================
+   工业科技风组件样式
+   ===================================================== */
+
+/* 工业风卡片 */
+.industrial-card {
+  background: linear-gradient(180deg, #111827 0%, #0d1320 100%);
+  border: 1px solid var(--border-primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.industrial-card:hover {
+  border-color: var(--border-secondary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 4px 30px rgba(14, 165, 233, 0.1);
+}
+
+/* 工业风标题 */
+.industrial-title {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-accent);
+  text-shadow: 0 0 10px rgba(14, 165, 233, 0.3);
+}
+
+/* 工业风标签/装饰线 */
+.industrial-label {
+  position: relative;
+  padding-left: 12px;
+}
+
+.industrial-label::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 100%;
+  background: linear-gradient(180deg, var(--border-accent) 0%, transparent 100%);
+  box-shadow: var(--glow-blue);
+}
+
+/* 数值显示 - 等宽字体 */
+.industrial-value {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+/* 状态指示器 */
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.status-indicator.normal {
+  background: var(--status-normal);
+  box-shadow: var(--glow-green);
+}
+
+.status-indicator.warning {
+  background: var(--status-warning);
+  box-shadow: var(--glow-yellow);
+}
+
+.status-indicator.danger {
+  background: var(--status-danger);
+  box-shadow: var(--glow-red);
+  animation: pulse-danger 1s ease-in-out infinite;
+}
+
+/* 脉冲动画 */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes pulse-danger {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+/* 扫描线效果 */
+.scanline {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanline::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--border-accent), transparent);
+  animation: scan 3s linear infinite;
+}
+
+@keyframes scan {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* 网格背景 */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(30, 58, 95, 0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30, 58, 95, 0.3) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* 工业风按钮 */
+.industrial-btn {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--border-primary);
+  background: linear-gradient(180deg, #1a2332 0%, #111827 100%);
+  transition: all 0.2s ease;
+}
+
+.industrial-btn:hover {
+  border-color: var(--border-accent);
+  box-shadow: var(--glow-blue);
+}
+
+.industrial-btn.primary {
+  background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
+  border-color: #0ea5e9;
+  color: #0a0e17;
+}
+
+.industrial-btn.primary:hover {
+  box-shadow: var(--glow-blue);
+}
+
+.industrial-btn.danger {
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+  border-color: #ef4444;
+}
+
+.industrial-btn.danger:hover {
+  box-shadow: var(--glow-red);
+}
+
+.industrial-btn.success {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  border-color: #22c55e;
+}
+
+.industrial-btn.success:hover {
+  box-shadow: var(--glow-green);
+}
+
+/* 进度条 */
+.industrial-progress {
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.industrial-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--status-info) 0%, #06b6d4 100%);
+  box-shadow: var(--glow-blue);
+  transition: width 0.3s ease;
+}
+
+/* 数据表格 */
+.industrial-table {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.industrial-table th {
+  background: var(--bg-tertiary);
+  color: var(--text-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.industrial-table td {
+  border-bottom: 1px solid rgba(30, 58, 95, 0.5);
+}
+
+.industrial-table tr:hover td {
+  background: rgba(14, 165, 233, 0.05);
+}
+
+/* 徽章/标签 */
+.industrial-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 2px;
+}
+
+.industrial-badge.normal {
+  background: var(--status-normal-dim);
+  color: var(--status-normal);
+  border: 1px solid var(--status-normal);
+}
+
+.industrial-badge.warning {
+  background: var(--status-warning-dim);
+  color: var(--status-warning);
+  border: 1px solid var(--status-warning);
+}
+
+.industrial-badge.danger {
+  background: var(--status-danger-dim);
+  color: var(--status-danger);
+  border: 1px solid var(--status-danger);
+}
+
+.industrial-badge.info {
+  background: var(--status-info-dim);
+  color: var(--status-info);
+  border: 1px solid var(--status-info);
+}
+
+/* 传感器类型徽章 */
+.sensor-badge.t {
+  background: var(--sensor-t-dim);
+  color: var(--sensor-t);
+  border: 1px solid var(--sensor-t);
+}
+
+.sensor-badge.wd {
+  background: var(--sensor-wd-dim);
+  color: var(--sensor-wd);
+  border: 1px solid var(--sensor-wd);
+}
+
+.sensor-badge.fs {
+  background: var(--sensor-fs-dim);
+  color: var(--sensor-fs);
+  border: 1px solid var(--sensor-fs);
+}
+
+/* 飞线动画 */
+@keyframes dash-flow {
+  to { stroke-dashoffset: -24; }
+}
+
+@keyframes flyline-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-secondary);
+}
+
+/* 选中效果 */
+::selection {
+  background: rgba(14, 165, 233, 0.3);
+  color: var(--text-primary);
 }

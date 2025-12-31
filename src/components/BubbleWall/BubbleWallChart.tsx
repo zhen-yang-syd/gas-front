@@ -124,10 +124,11 @@ export function BubbleWallChart({
       )}
 
       <svg
-        width="120"
-        height="120"
+        width="100%"
+        height="100%"
         viewBox="0 0 120 120"
         className={`overflow-visible cursor-pointer transition-transform ${isHovered ? "scale-105" : ""}`}
+        preserveAspectRatio="xMidYMid meet"
       >
       {/* 背景 */}
       <rect
