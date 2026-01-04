@@ -50,12 +50,23 @@ interface BubbleWallData {
   };
 }
 
+interface DatasetInfo {
+  total: number;
+  current: number;
+  progress: number;
+}
+
 interface SystemStatus {
   is_running: boolean;
   frequency: number;
   current_index: number;
   total_rows: number;
   progress: number;
+  datasets?: {
+    gas_gas: DatasetInfo;
+    gas_wd: DatasetInfo;
+    gas_fs: DatasetInfo;
+  };
 }
 
 interface CorrelationItem {
@@ -109,6 +120,11 @@ export default function Home() {
   const [sensorConfig, setSensorConfig] = useState<SensorConfig | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
   const sseConnectedRef = useRef(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugData, setDebugData] = useState<{
+    lastSseData: Record<string, unknown> | null;
+    sseEventCount: number;
+  }>({ lastSseData: null, sseEventCount: 0 });
 
   // 检查API连接并获取传感器配置
   useEffect(() => {
@@ -234,6 +250,12 @@ export default function Home() {
       eventSource.addEventListener("analysis", (event) => {
         try {
           const data = JSON.parse(event.data);
+
+          // 保存调试数据
+          setDebugData(prev => ({
+            lastSseData: data,
+            sseEventCount: prev.sseEventCount + 1,
+          }));
 
           if (data.bubble_wall) setBubbleWall(data.bubble_wall);
 
@@ -414,15 +436,38 @@ export default function Home() {
             重置
           </button>
 
-          {/* 系统状态 */}
+          {/* 系统状态 - 三数据集进度 */}
           {systemStatus && (
             <div className="flex items-center gap-4 ml-auto text-xs font-mono">
               <div className="flex items-center gap-2">
                 <span className={`status-indicator ${systemStatus.is_running ? "status-normal" : "status-muted"}`} />
                 <span className="text-soft">{systemStatus.is_running ? "运行中" : "已停止"}</span>
               </div>
-              <span className="text-dim">索引: <span className="text-bright">{systemStatus.current_index}</span> / {systemStatus.total_rows}</span>
-              <span className="text-dim">进度: <span className="text-accent">{(systemStatus.progress * 100).toFixed(1)}%</span></span>
+              {systemStatus.datasets ? (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1" title="Gas-Gas (T-T分析)">
+                    <span className="text-dim">T-T:</span>
+                    <span className="text-bright">{systemStatus.datasets.gas_gas.current}</span>
+                    <span className="text-dim">/</span>
+                    <span className="text-soft">{systemStatus.datasets.gas_gas.total}</span>
+                  </div>
+                  <div className="flex items-center gap-1" title="Gas-WD (T-WD分析)">
+                    <span className="text-dim">T-WD:</span>
+                    <span className="text-bright">{systemStatus.datasets.gas_wd.current}</span>
+                    <span className="text-dim">/</span>
+                    <span className="text-soft">{systemStatus.datasets.gas_wd.total}</span>
+                  </div>
+                  <div className="flex items-center gap-1" title="Gas-FS (T-FS分析)">
+                    <span className="text-dim">T-FS:</span>
+                    <span className="text-bright">{systemStatus.datasets.gas_fs.current}</span>
+                    <span className="text-dim">/</span>
+                    <span className="text-soft">{systemStatus.datasets.gas_fs.total}</span>
+                  </div>
+                  <span className="text-accent">{(systemStatus.progress * 100).toFixed(1)}%</span>
+                </div>
+              ) : (
+                <span className="text-dim">索引: <span className="text-bright">{systemStatus.current_index}</span> / {systemStatus.total_rows}</span>
+              )}
             </div>
           )}
         </div>
@@ -585,7 +630,109 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t border-edge bg-surface px-4 py-2 text-center text-xs text-dim font-mono">
         煤矿瓦斯监测预警系统 v1.0 | 传感器关联分析平台
+        <button
+          onClick={() => setShowDebug(!showDebug)}
+          className="ml-4 px-2 py-0.5 bg-tertiary hover:bg-muted rounded text-accent"
+        >
+          {showDebug ? "隐藏调试" : "显示调试"}
+        </button>
       </footer>
+
+      {/* Debug Panel */}
+      {showDebug && (
+        <div className="fixed bottom-12 left-0 right-0 bg-surface border-t border-edge p-4 max-h-[40vh] overflow-auto font-mono text-xs">
+          <div className="grid grid-cols-4 gap-4">
+            {/* SSE 状态 */}
+            <div className="bg-tertiary p-3 rounded">
+              <div className="text-accent mb-2">SSE 状态</div>
+              <div className="space-y-1">
+                <div>连接: <span className={sseConnected ? "text-ok" : "text-err"}>{sseConnected ? "已连接" : "未连接"}</span></div>
+                <div>事件数: <span className="text-bright">{debugData.sseEventCount}</span></div>
+              </div>
+            </div>
+
+            {/* 相关性数据 */}
+            <div className="bg-tertiary p-3 rounded">
+              <div className="text-accent mb-2">相关性缓存</div>
+              <div className="space-y-1">
+                <div>T-T: <span className="text-bright">{persistentCorrelations["T-T"].size}</span> 对</div>
+                <div>T-WD: <span className={persistentCorrelations["T-WD"].size > 0 ? "text-ok" : "text-err"}>{persistentCorrelations["T-WD"].size}</span> 对</div>
+                <div>T-FS: <span className={persistentCorrelations["T-FS"].size > 0 ? "text-ok" : "text-err"}>{persistentCorrelations["T-FS"].size}</span> 对</div>
+              </div>
+            </div>
+
+            {/* 气泡墙数据 */}
+            <div className="bg-tertiary p-3 rounded">
+              <div className="text-accent mb-2">气泡墙</div>
+              <div className="space-y-1">
+                <div>总气泡: <span className="text-bright">{bubbleWall?.bubbles?.length || 0}</span></div>
+                <div>按类型: {bubbleWall?.summary?.by_type ? (
+                  <span>
+                    T-T: {bubbleWall.summary.by_type["T-T"] || 0},
+                    T-WD: {bubbleWall.summary.by_type["T-WD"] || 0},
+                    T-FS: {bubbleWall.summary.by_type["T-FS"] || 0}
+                  </span>
+                ) : "无数据"}</div>
+              </div>
+            </div>
+
+            {/* 最新 SSE 数据 */}
+            <div className="bg-tertiary p-3 rounded">
+              <div className="text-accent mb-2">最新 SSE 数据</div>
+              {debugData.lastSseData ? (
+                <div className="space-y-1">
+                  <div>correlations: {Object.keys(debugData.lastSseData.correlations || {}).join(", ") || "无"}</div>
+                  <div>T-T results: {((debugData.lastSseData.correlations as Record<string, {results?: unknown[]}>)?.["T-T"]?.results?.length) || 0}</div>
+                  <div>T-WD results: {((debugData.lastSseData.correlations as Record<string, {results?: unknown[]}>)?.["T-WD"]?.results?.length) || 0}</div>
+                  <div>T-FS results: {((debugData.lastSseData.correlations as Record<string, {results?: unknown[]}>)?.["T-FS"]?.results?.length) || 0}</div>
+                </div>
+              ) : (
+                <div className="text-dim">等待数据...</div>
+              )}
+            </div>
+          </div>
+
+          {/* T-FS 详细诊断 */}
+          <div className="mt-4 bg-tertiary p-3 rounded">
+            <div className="text-accent mb-2">T-FS 诊断</div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <div className="text-dim mb-1">{`前端 correlations["T-FS"]`}</div>
+                <div className="text-bright">{correlations["T-FS"]?.results?.length || 0} 条</div>
+                {correlations["T-FS"]?.results?.slice(0, 3).map((c, i) => (
+                  <div key={i} className="text-xs text-soft">{c.sensor1} → {c.sensor2}: r={c.r_value.toFixed(3)}</div>
+                ))}
+              </div>
+              <div>
+                <div className="text-dim mb-1">{`SSE validity["T-FS"]`}</div>
+                {debugData.lastSseData?.validity ? (
+                  <div>
+                    <div className={((debugData.lastSseData.validity as Record<string, {overall_valid?: boolean}>)?.["T-FS"]?.overall_valid) ? "text-ok" : "text-err"}>
+                      overall_valid: {String((debugData.lastSseData.validity as Record<string, {overall_valid?: boolean}>)?.["T-FS"]?.overall_valid ?? "无数据")}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-dim">无数据</div>
+                )}
+              </div>
+              <div>
+                <div className="text-dim mb-1">气泡墙 T-FS 类型</div>
+                <div className="text-bright">
+                  {bubbleWall?.bubbles?.filter(b => b.type === "T-FS").length || 0} 个气泡
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 详细 JSON */}
+          <details className="mt-4">
+            <summary className="text-accent cursor-pointer">查看完整 SSE 数据</summary>
+            <pre className="mt-2 p-2 bg-base rounded overflow-auto max-h-40 text-dim">
+              {JSON.stringify(debugData.lastSseData, null, 2)}
+            </pre>
+          </details>
+        </div>
+      )}
     </div>
   );
 }
