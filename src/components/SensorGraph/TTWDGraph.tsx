@@ -35,6 +35,26 @@ const WD_SENSORS = [
   "WD010201", "WD010301", "WD010302", "WD010401", "WD010501",
 ];
 
+// Link 数据类型
+interface LinkData {
+  id: string;
+  type: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  r: number;
+  strength: string;
+  hasData: boolean;
+  width: number;
+  opacity: number;
+  dash: string;
+  animated: boolean;
+  isLine?: boolean;
+  cx?: number;
+  cy?: number;
+}
+
 // 工业科技风配色
 const NODE_COLORS = {
   T: "#06b6d4",   // 青色 - T传感器
@@ -48,16 +68,19 @@ const LINK_COLORS = {
 
 function getLinkStyle(r: number, hasData: boolean) {
   if (!hasData) {
-    return { width: 0.5, opacity: 0.05, dash: "2,4", animated: false };
+    return { width: 0.5, opacity: 0.1, dash: "2,4", animated: false };
   }
   const absR = Math.abs(r);
   if (absR >= 0.7) {
+    // 强相关：粗实线 + 动画
     return { width: 2, opacity: 1, dash: "none", animated: true };
   }
   if (absR >= 0.3) {
-    return { width: 1.2, opacity: 0.6, dash: "none", animated: false };
+    // 中等相关：中等实线
+    return { width: 1.2, opacity: 0.7, dash: "none", animated: false };
   }
-  return { width: 0.8, opacity: 0.2, dash: "4,2", animated: false };
+  // 弱相关：细虚线（但仍可见）
+  return { width: 0.8, opacity: 0.35, dash: "3,3", animated: false };
 }
 
 function shortenName(id: string): string {
@@ -111,20 +134,22 @@ export function TTWDGraph({
     WD: width - 40,   // 第三列 WD
   };
 
+  // 统一计算节点位置，确保所有列填充相同的垂直范围
   const calculateNodes = (sensors: string[], x: number) => {
-    const padding = 20;
-    const availableHeight = height - padding * 2;
+    const topPadding = 22;  // 标题下方开始
+    const bottomPadding = 8; // 底部留小边距
+    const availableHeight = height - topPadding - bottomPadding;
     const step = sensors.length > 1 ? availableHeight / (sensors.length - 1) : 0;
     return sensors.map((id, i) => ({
       id,
       x,
-      y: padding + (sensors.length > 1 ? i * step : availableHeight / 2),
+      y: topPadding + (sensors.length > 1 ? i * step : availableHeight / 2),
     }));
   };
 
-  const t1Nodes = useMemo(() => calculateNodes(T_SENSORS_COL1, colX.T1), [colX.T1, height]);
-  const t2Nodes = useMemo(() => calculateNodes(T_SENSORS_COL2, colX.T2), [colX.T2, height]);
-  const wdNodes = useMemo(() => calculateNodes(WD_SENSORS, colX.WD), [colX.WD, height]);
+  const t1Nodes = calculateNodes(T_SENSORS_COL1, colX.T1);
+  const t2Nodes = calculateNodes(T_SENSORS_COL2, colX.T2);
+  const wdNodes = calculateNodes(WD_SENSORS, colX.WD);
 
   const nodePositions = useMemo(() => {
     const map = new Map<string, { x: number; y: number }>();
@@ -134,7 +159,7 @@ export function TTWDGraph({
 
   // T-WD 连线 (只显示有数据的)
   const tWdLinks = useMemo(() => {
-    const links: any[] = [];
+    const links: LinkData[] = [];
     ALL_T_SENSORS.forEach((t) => {
       WD_SENSORS.forEach((wd) => {
         const pos1 = nodePositions.get(t);
@@ -164,7 +189,7 @@ export function TTWDGraph({
 
   // T-T 弧线连线 (在两列T之间)
   const tTLinks = useMemo(() => {
-    const links: any[] = [];
+    const links: LinkData[] = [];
 
     // 第一列内部的 T-T
     for (let i = 0; i < T_SENSORS_COL1.length; i++) {
@@ -271,7 +296,7 @@ export function TTWDGraph({
   }, [hoveredLink, tTLinks, tWdLinks]);
 
   return (
-    <div className="tt-wd-graph">
+    <div className="tt-wd-graph h-full flex flex-col">
       {/* 标题 */}
       <div className="flex items-center justify-between text-xs mb-2 px-1">
         <span className="font-mono text-accent uppercase tracking-wider">T-T-WD</span>
@@ -281,9 +306,15 @@ export function TTWDGraph({
         </div>
       </div>
 
-      {/* 图表 */}
-      <div className="overflow-hidden rounded border border-edge bg-surface">
-        <svg width={width} height={height} className="block">
+      {/* 图表 - 响应式填充容器 */}
+      <div className="overflow-hidden rounded border border-edge bg-surface flex-1" style={{ minHeight: height }}>
+        <svg
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="xMidYMid meet"
+          className="block"
+        >
           <rect x="0" y="0" width={width} height={height} fill="var(--bg-surface)" />
 
           {/* 网格线 */}
@@ -295,9 +326,9 @@ export function TTWDGraph({
           <rect width={width} height={height} fill="url(#grid-ttwd)" />
 
           {/* 列标题 */}
-          <text x={colX.T1} y="12" fontSize="8" fill="var(--text-dim)" textAnchor="middle" fontFamily="var(--font-mono)">T1-T2</text>
-          <text x={colX.T2} y="12" fontSize="8" fill="var(--text-dim)" textAnchor="middle" fontFamily="var(--font-mono)">T3</text>
-          <text x={colX.WD} y="12" fontSize="8" fill="var(--text-dim)" textAnchor="middle" fontFamily="var(--font-mono)">WD</text>
+          <text x={colX.T1} y="12" fontSize="8" fill="#9ca3af" textAnchor="middle" fontFamily="var(--font-mono)">T1-T2</text>
+          <text x={colX.T2} y="12" fontSize="8" fill="#9ca3af" textAnchor="middle" fontFamily="var(--font-mono)">T3</text>
+          <text x={colX.WD} y="12" fontSize="8" fill="#9ca3af" textAnchor="middle" fontFamily="var(--font-mono)">WD</text>
 
           {/* T-T 弧线/直线 */}
           <g className="t-t-links">
@@ -390,13 +421,13 @@ export function TTWDGraph({
               <circle
                 cx={node.x} cy={node.y} r={3.5}
                 fill={NODE_COLORS.T}
-                stroke="var(--bg-primary)"
+                stroke="#111827"
                 strokeWidth={1}
                 filter="drop-shadow(0 0 2px rgba(6, 182, 212, 0.5))"
               />
               <text
                 x={node.x - 6} y={node.y + 3}
-                fontSize="5" fill="var(--text-soft)"
+                fontSize="7" fill="#cbd5e1"
                 textAnchor="end" fontFamily="var(--font-mono)"
               >
                 {shortenName(node.id)}
@@ -410,13 +441,13 @@ export function TTWDGraph({
               <circle
                 cx={node.x} cy={node.y} r={3.5}
                 fill={NODE_COLORS.T}
-                stroke="var(--bg-primary)"
+                stroke="#111827"
                 strokeWidth={1}
                 filter="drop-shadow(0 0 2px rgba(6, 182, 212, 0.5))"
               />
               <text
                 x={node.x} y={node.y + 10}
-                fontSize="5" fill="var(--text-soft)"
+                fontSize="7" fill="#cbd5e1"
                 textAnchor="middle" fontFamily="var(--font-mono)"
               >
                 {shortenName(node.id)}
@@ -430,13 +461,13 @@ export function TTWDGraph({
               <circle
                 cx={node.x} cy={node.y} r={3.5}
                 fill={NODE_COLORS.WD}
-                stroke="var(--bg-primary)"
+                stroke="#111827"
                 strokeWidth={1}
                 filter="drop-shadow(0 0 2px rgba(59, 130, 246, 0.5))"
               />
               <text
                 x={node.x + 6} y={node.y + 3}
-                fontSize="5" fill="var(--text-soft)"
+                fontSize="7" fill="#cbd5e1"
                 textAnchor="start" fontFamily="var(--font-mono)"
               >
                 {shortenName(node.id)}

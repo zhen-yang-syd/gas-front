@@ -67,14 +67,6 @@ interface CorrelationItem {
   is_significant: boolean;
 }
 
-interface CorrelationTypeResult {
-  total_pairs: number;
-  by_strength: Record<string, number>;
-  avg_r: number;
-  max_r: number;
-  results: CorrelationItem[];
-}
-
 interface PredictionData {
   sensor_id: string;
   history: number[];
@@ -88,11 +80,23 @@ export default function Home() {
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [bubbleWall, setBubbleWall] = useState<BubbleWallData | null>(null);
   const [demoMode, setDemoMode] = useState<"idle" | "preparing" | "running">("idle");
-  const [correlations, setCorrelations] = useState<{
-    "T-T": CorrelationTypeResult | null;
-    "T-WD": CorrelationTypeResult | null;
-    "T-FS": CorrelationTypeResult | null;
-  } | null>(null);
+  // 持久化相关性缓存 - 使用 Map 累积，连线建立后保留
+  const [persistentCorrelations, setPersistentCorrelations] = useState<{
+    "T-T": Map<string, CorrelationItem>;
+    "T-WD": Map<string, CorrelationItem>;
+    "T-FS": Map<string, CorrelationItem>;
+  }>({
+    "T-T": new Map(),
+    "T-WD": new Map(),
+    "T-FS": new Map(),
+  });
+
+  // 转换为组件需要的格式
+  const correlations = {
+    "T-T": { results: Array.from(persistentCorrelations["T-T"].values()) },
+    "T-WD": { results: Array.from(persistentCorrelations["T-WD"].values()) },
+    "T-FS": { results: Array.from(persistentCorrelations["T-FS"].values()) },
+  };
   const [predictions, setPredictions] = useState<PredictionData[]>([]);
   const [sensorData, setSensorData] = useState<Record<string, number>>({});
   const [lastUpdate, setLastUpdate] = useState<string>("");
@@ -138,12 +142,28 @@ export default function Home() {
     }
   }, []);
 
-  // 获取相关性数据
+  // 获取相关性数据（合并到持久化缓存）
   const fetchCorrelations = useCallback(async () => {
     try {
       const data = await analysisApi.getCorrelation();
       if (data.correlations) {
-        setCorrelations(data.correlations);
+        setPersistentCorrelations(prev => {
+          const newState = {
+            "T-T": new Map(prev["T-T"]),
+            "T-WD": new Map(prev["T-WD"]),
+            "T-FS": new Map(prev["T-FS"]),
+          };
+
+          (["T-T", "T-WD", "T-FS"] as const).forEach(type => {
+            const results = data.correlations[type]?.results || [];
+            results.forEach((corr: CorrelationItem) => {
+              const key = [corr.sensor1, corr.sensor2].sort().join("-");
+              newState[type].set(key, corr);
+            });
+          });
+
+          return newState;
+        });
       }
     } catch (e) {
       console.error("Failed to fetch correlations:", e);
@@ -217,11 +237,26 @@ export default function Home() {
 
           if (data.bubble_wall) setBubbleWall(data.bubble_wall);
 
+          // 合并新相关性到持久化缓存（累积而非覆盖）
           if (data.correlations) {
-            setCorrelations({
-              "T-T": data.correlations["T-T"] || null,
-              "T-WD": data.correlations["T-WD"] || null,
-              "T-FS": data.correlations["T-FS"] || null,
+            setPersistentCorrelations(prev => {
+              const newState = {
+                "T-T": new Map(prev["T-T"]),
+                "T-WD": new Map(prev["T-WD"]),
+                "T-FS": new Map(prev["T-FS"]),
+              };
+
+              (["T-T", "T-WD", "T-FS"] as const).forEach(type => {
+                const results = data.correlations[type]?.results || [];
+                results.forEach((corr: CorrelationItem) => {
+                  // 使用排序后的 key 确保双向一致
+                  const key = [corr.sensor1, corr.sensor2].sort().join("-");
+                  // 更新已有或新增（r_value 会更新为最新值）
+                  newState[type].set(key, corr);
+                });
+              });
+
+              return newState;
             });
           }
 
@@ -313,10 +348,9 @@ export default function Home() {
     .filter(([, value]) => value > 0.8)
     .map(([id]) => id);
 
+  // 显示所有气泡的连线（不限于异常状态）
   const alertPairs = bubbleWall?.bubbles
-    .filter((b) => b.status.includes("WARNING") || b.status.includes("ABNORMAL"))
-    .slice(0, 5)
-    .map((b) => ({ sensor1: b.sensor_pair[0], sensor2: b.sensor_pair[1], cav: b.cav })) || [];
+    .map((b) => ({ sensor1: b.sensor_pair[0], sensor2: b.sensor_pair[1], cav: b.cav, status: b.status })) || [];
 
   return (
     <div className="min-h-screen bg-base">
@@ -550,7 +584,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="border-t border-edge bg-surface px-4 py-2 text-center text-xs text-dim font-mono">
-        煤矿瓦斯监测预警系统 v1.0 | 三分法相关性分析框架
+        煤矿瓦斯监测预警系统 v1.0 | 传感器关联分析平台
       </footer>
     </div>
   );

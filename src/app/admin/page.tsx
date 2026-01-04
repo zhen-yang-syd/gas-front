@@ -12,6 +12,12 @@ interface ValidityResult {
   communality?: { mean: number; threshold: number; passed: boolean };
   adequate_sensors?: string[];
   inadequate_sensors?: { id: string; msa: number; reason: string }[];
+  validation_type?: string;  // "grouped" for T-WD/T-FS
+  group_summary?: {
+    T_valid?: boolean;
+    WD_valid?: boolean;
+    FS_valid?: boolean;
+  };
 }
 
 interface FSVResult {
@@ -136,7 +142,7 @@ export default function AdminPage() {
           <div className="flex items-center gap-4">
             <div className="industrial-title text-lg">
               <span className="text-accent font-display">ANALYSIS</span>
-              <span className="text-soft ml-2 text-sm font-body">三分法相关性分析管理</span>
+              <span className="text-soft ml-2 text-sm font-body">相关性分析管理</span>
             </div>
           </div>
 
@@ -217,6 +223,24 @@ export default function AdminPage() {
                   <span className={`px-3 py-1 rounded text-xs font-mono ${currentValidity?.overall_valid ? "bg-normal/20 text-ok border border-normal" : "bg-danger/20 text-err border border-danger"}`}>
                     {currentValidity?.overall_valid ? "已验证" : "未验证"}
                   </span>
+                  {/* 分组验证详情 */}
+                  {currentValidity?.validation_type === "grouped" && currentValidity?.group_summary && (
+                    <div className="flex items-center gap-2 ml-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-mono ${currentValidity.group_summary.T_valid ? "bg-normal/20 text-ok" : "bg-danger/20 text-err"}`}>
+                        T组 {currentValidity.group_summary.T_valid ? "✓" : "✗"}
+                      </span>
+                      {selectedType === "T-WD" && (
+                        <span className={`px-2 py-0.5 rounded text-xs font-mono ${currentValidity.group_summary.WD_valid ? "bg-normal/20 text-ok" : "bg-danger/20 text-err"}`}>
+                          WD组 {currentValidity.group_summary.WD_valid ? "✓" : "✗"}
+                        </span>
+                      )}
+                      {selectedType === "T-FS" && (
+                        <span className={`px-2 py-0.5 rounded text-xs font-mono ${currentValidity.group_summary.FS_valid ? "bg-normal/20 text-ok" : "bg-danger/20 text-err"}`}>
+                          FS组 {currentValidity.group_summary.FS_valid ? "✓" : "✗"}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {currentValidity?.adequate_sensors && (
                   <span className="text-xs text-dim">
@@ -299,13 +323,13 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* 三分法递归可视化（简化版） */}
+          {/* 数据分段分析可视化（简化版） */}
           <div className="col-span-6">
             <div className="industrial-card p-4 h-[400px] flex flex-col">
-              <div className="industrial-title text-xs mb-4">三分法递归</div>
+              <div className="industrial-title text-xs mb-4">数据分段分析</div>
 
               <div className="flex-1 flex flex-col items-center justify-center">
-                {/* 简化的三分法示意图 */}
+                {/* 简化的分段示意图 */}
                 <div className="relative w-full max-w-xs">
                   {/* 全量数据 */}
                   <div className="text-center mb-4">
@@ -455,7 +479,7 @@ export default function AdminPage() {
 
       {/* Footer */}
       <footer className="border-t border-edge bg-surface px-4 py-2 text-center text-xs text-dim font-mono">
-        分析管理 | 三分法相关性分析框架 | 自动刷新: {autoRefresh ? "开启 (30秒)" : "关闭"}
+        分析管理 | 传感器关联分析平台 | 自动刷新: {autoRefresh ? "开启 (30秒)" : "关闭"}
       </footer>
     </div>
   );

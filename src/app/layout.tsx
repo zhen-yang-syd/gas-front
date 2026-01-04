@@ -20,7 +20,7 @@ const orbitron = Orbitron({
 
 export const metadata: Metadata = {
   title: "煤矿瓦斯监测预警系统",
-  description: "基于三分法相关性分析的煤矿瓦斯传感器监测预警平台",
+  description: "煤矿瓦斯传感器实时监测预警平台",
 };
 
 export default function RootLayout({

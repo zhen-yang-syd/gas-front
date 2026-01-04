@@ -35,6 +35,26 @@ const FS_SENSORS = [
   "FS010301", "FS010302",
 ];
 
+// Link 数据类型
+interface LinkData {
+  id: string;
+  type: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  r: number;
+  strength: string;
+  hasData: boolean;
+  width: number;
+  opacity: number;
+  dash: string;
+  animated: boolean;
+  isLine?: boolean;
+  cx?: number;
+  cy?: number;
+}
+
 // 工业科技风配色
 const NODE_COLORS = {
   T: "#06b6d4",   // 青色 - T传感器
@@ -48,16 +68,19 @@ const LINK_COLORS = {
 
 function getLinkStyle(r: number, hasData: boolean) {
   if (!hasData) {
-    return { width: 0.5, opacity: 0.05, dash: "2,4", animated: false };
+    return { width: 0.5, opacity: 0.1, dash: "2,4", animated: false };
   }
   const absR = Math.abs(r);
   if (absR >= 0.7) {
+    // 强相关：粗实线 + 动画
     return { width: 2, opacity: 1, dash: "none", animated: true };
   }
   if (absR >= 0.3) {
-    return { width: 1.2, opacity: 0.6, dash: "none", animated: false };
+    // 中等相关：中等实线
+    return { width: 1.2, opacity: 0.7, dash: "none", animated: false };
   }
-  return { width: 0.8, opacity: 0.2, dash: "4,2", animated: false };
+  // 弱相关：细虚线（但仍可见）
+  return { width: 0.8, opacity: 0.35, dash: "3,3", animated: false };
 }
 
 function shortenName(id: string): string {
@@ -109,17 +132,20 @@ export function TTFSGraph({
     FS: width - 40,   // 第三列 FS
   };
 
+  // 统一计算节点位置，确保所有列填充相同的垂直范围
   const calculateNodes = (sensors: string[], x: number, spread: boolean = false) => {
-    const padding = 20;
-    const availableHeight = height - padding * 2;
+    const topPadding = 22;  // 标题下方开始
+    const bottomPadding = 8; // 底部留小边距
+    const availableHeight = height - topPadding - bottomPadding;
 
-    // FS传感器较少，需要更大间距
+    // FS传感器较少，需要更大间距但仍填满整个高度
     if (spread && sensors.length < 10) {
-      const step = availableHeight / (sensors.length + 1);
+      // 改为与其他列相同的范围，只是间距更大
+      const step = sensors.length > 1 ? availableHeight / (sensors.length - 1) : 0;
       return sensors.map((id, i) => ({
         id,
         x,
-        y: padding + step * (i + 1),
+        y: topPadding + (sensors.length > 1 ? i * step : availableHeight / 2),
       }));
     }
 
@@ -127,13 +153,13 @@ export function TTFSGraph({
     return sensors.map((id, i) => ({
       id,
       x,
-      y: padding + (sensors.length > 1 ? i * step : availableHeight / 2),
+      y: topPadding + (sensors.length > 1 ? i * step : availableHeight / 2),
     }));
   };
 
-  const t1Nodes = useMemo(() => calculateNodes(T_SENSORS_COL1, colX.T1), [colX.T1, height]);
-  const t2Nodes = useMemo(() => calculateNodes(T_SENSORS_COL2, colX.T2), [colX.T2, height]);
-  const fsNodes = useMemo(() => calculateNodes(FS_SENSORS, colX.FS, true), [colX.FS, height]);
+  const t1Nodes = calculateNodes(T_SENSORS_COL1, colX.T1);
+  const t2Nodes = calculateNodes(T_SENSORS_COL2, colX.T2);
+  const fsNodes = calculateNodes(FS_SENSORS, colX.FS, true);
 
   const nodePositions = useMemo(() => {
     const map = new Map<string, { x: number; y: number }>();
@@ -143,7 +169,7 @@ export function TTFSGraph({
 
   // T-FS 连线 (只显示有数据的)
   const tFsLinks = useMemo(() => {
-    const links: any[] = [];
+    const links: LinkData[] = [];
     ALL_T_SENSORS.forEach((t) => {
       FS_SENSORS.forEach((fs) => {
         const pos1 = nodePositions.get(t);
@@ -173,7 +199,7 @@ export function TTFSGraph({
 
   // T-T 弧线连线 (在两列T之间)
   const tTLinks = useMemo(() => {
-    const links: any[] = [];
+    const links: LinkData[] = [];
 
     // 第一列内部的 T-T
     for (let i = 0; i < T_SENSORS_COL1.length; i++) {
@@ -280,7 +306,7 @@ export function TTFSGraph({
   }, [hoveredLink, tTLinks, tFsLinks]);
 
   return (
-    <div className="tt-fs-graph">
+    <div className="tt-fs-graph h-full flex flex-col">
       {/* 标题 */}
       <div className="flex items-center justify-between text-xs mb-2 px-1">
         <span className="font-mono text-accent uppercase tracking-wider">T-T-FS</span>
@@ -290,9 +316,15 @@ export function TTFSGraph({
         </div>
       </div>
 
-      {/* 图表 */}
-      <div className="overflow-hidden rounded border border-edge bg-surface">
-        <svg width={width} height={height} className="block">
+      {/* 图表 - 响应式填充容器 */}
+      <div className="overflow-hidden rounded border border-edge bg-surface flex-1" style={{ minHeight: height }}>
+        <svg
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="xMidYMid meet"
+          className="block"
+        >
           <rect x="0" y="0" width={width} height={height} fill="var(--bg-surface)" />
 
           {/* 网格线 */}
@@ -304,9 +336,9 @@ export function TTFSGraph({
           <rect width={width} height={height} fill="url(#grid-ttfs)" />
 
           {/* 列标题 */}
-          <text x={colX.T1} y="12" fontSize="8" fill="var(--text-dim)" textAnchor="middle" fontFamily="var(--font-mono)">T1-T2</text>
-          <text x={colX.T2} y="12" fontSize="8" fill="var(--text-dim)" textAnchor="middle" fontFamily="var(--font-mono)">T3</text>
-          <text x={colX.FS} y="12" fontSize="8" fill="var(--text-dim)" textAnchor="middle" fontFamily="var(--font-mono)">FS</text>
+          <text x={colX.T1} y="12" fontSize="8" fill="#9ca3af" textAnchor="middle" fontFamily="var(--font-mono)">T1-T2</text>
+          <text x={colX.T2} y="12" fontSize="8" fill="#9ca3af" textAnchor="middle" fontFamily="var(--font-mono)">T3</text>
+          <text x={colX.FS} y="12" fontSize="8" fill="#9ca3af" textAnchor="middle" fontFamily="var(--font-mono)">FS</text>
 
           {/* T-T 弧线/直线 */}
           <g className="t-t-links">
@@ -399,13 +431,13 @@ export function TTFSGraph({
               <circle
                 cx={node.x} cy={node.y} r={3.5}
                 fill={NODE_COLORS.T}
-                stroke="var(--bg-primary)"
+                stroke="#111827"
                 strokeWidth={1}
                 filter="drop-shadow(0 0 2px rgba(6, 182, 212, 0.5))"
               />
               <text
                 x={node.x - 6} y={node.y + 3}
-                fontSize="5" fill="var(--text-soft)"
+                fontSize="7" fill="#cbd5e1"
                 textAnchor="end" fontFamily="var(--font-mono)"
               >
                 {shortenName(node.id)}
@@ -419,13 +451,13 @@ export function TTFSGraph({
               <circle
                 cx={node.x} cy={node.y} r={3.5}
                 fill={NODE_COLORS.T}
-                stroke="var(--bg-primary)"
+                stroke="#111827"
                 strokeWidth={1}
                 filter="drop-shadow(0 0 2px rgba(6, 182, 212, 0.5))"
               />
               <text
                 x={node.x} y={node.y + 10}
-                fontSize="5" fill="var(--text-soft)"
+                fontSize="7" fill="#cbd5e1"
                 textAnchor="middle" fontFamily="var(--font-mono)"
               >
                 {shortenName(node.id)}
@@ -439,13 +471,13 @@ export function TTFSGraph({
               <circle
                 cx={node.x} cy={node.y} r={4}
                 fill={NODE_COLORS.FS}
-                stroke="var(--bg-primary)"
+                stroke="#111827"
                 strokeWidth={1}
                 filter="drop-shadow(0 0 3px rgba(249, 115, 22, 0.6))"
               />
               <text
                 x={node.x + 7} y={node.y + 3}
-                fontSize="6" fill="var(--text-soft)"
+                fontSize="7" fill="#cbd5e1"
                 textAnchor="start" fontFamily="var(--font-mono)"
               >
                 {shortenName(node.id)}

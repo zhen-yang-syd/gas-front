@@ -20,6 +20,15 @@ interface AlertPair {
   sensor1: string;
   sensor2: string;
   cav: number;
+  status?: string;
+}
+
+// 根据状态获取连线颜色
+function getStatusColor(status?: string): string {
+  if (!status) return "#3B82F6"; // 默认蓝色
+  if (status.includes("WARNING")) return "#EF4444"; // 红色
+  if (status.includes("ABNORMAL")) return "#F59E0B"; // 橙色
+  return "#3B82F6"; // 正常蓝色
 }
 
 interface MineMapProps {
@@ -250,14 +259,16 @@ export function MineMap({
     </g>
   );
 
-  // 渲染飞线
+  // 渲染飞线 - 显示所有传感器对的连线
   const renderFlylines = () => (
     <g className="flylines">
-      {alertPairs.slice(0, 5).map((pair, index) => {
+      {alertPairs.map((pair, index) => {
         const pos1 = getSensorPosition(pair.sensor1);
         const pos2 = getSensorPosition(pair.sensor2);
 
         if (!pos1 || !pos2) return null;
+
+        const color = getStatusColor(pair.status);
 
         return (
           <Flyline
@@ -265,7 +276,7 @@ export function MineMap({
             from={{ x: pos1.x, y: pos1.y }}
             to={{ x: pos2.x, y: pos2.y }}
             active={true}
-            color="#EF4444"
+            color={color}
             label={`r=${pair.cav.toFixed(2)}`}
           />
         );
