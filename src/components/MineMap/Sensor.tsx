@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { getSensorLabel } from "@/lib/sensors";
 
 interface SensorProps {
   id: string;
@@ -145,7 +146,7 @@ export function Sensor({
       {/* 传感器形状 */}
       {renderShape()}
 
-      {/* ID标签 */}
+      {/* ID标签 - 使用简称 */}
       <text
         x={x}
         y={y + styles.size + 12}
@@ -153,7 +154,7 @@ export function Sensor({
         fill="#94A3B8"
         textAnchor="middle"
       >
-        {id.replace("T0", "T").replace("WD0", "W").replace("FS0", "F")}
+        {getSensorLabel(id)}
       </text>
 
       {/* 数值显示 (仅T传感器，且值有效) */}

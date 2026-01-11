@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import dynamic from "next/dynamic";
+import { getSensorLabel } from "@/lib/sensors";
 
 // 动态导入ECharts避免SSR问题
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
@@ -84,7 +85,7 @@ export function PredictionChart({
       animation: true,
       animationDuration: 300,
       title: {
-        text: sensorId.replace("T0", "T"),
+        text: getSensorLabel(sensorId),
         subtext: currentValue !== null ? `${currentValue.toFixed(3)}%` : "",
         left: 8,
         top: 5,

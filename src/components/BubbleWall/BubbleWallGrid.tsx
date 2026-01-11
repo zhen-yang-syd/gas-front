@@ -43,7 +43,7 @@ interface BubbleWallGridProps {
 export function BubbleWallGrid({
   bubbles,
   globalThresholds,
-  maxDisplay = 24,
+  maxDisplay = 30,  // 默认显示30对（T-T:10, T-WD:10, T-FS:10）
   columns: _columns = 6,  // eslint-disable-line @typescript-eslint/no-unused-vars
 }: BubbleWallGridProps) {
   // 限制显示数量
@@ -118,9 +118,9 @@ export function BubbleWallGrid({
       {/* 气泡墙图网格 - 使用 CSS Grid 固定5列布局 */}
       {displayBubbles.length > 0 ? (
         <div className="grid grid-cols-5 gap-3">
-          {displayBubbles.map((bubble, index) => (
+          {displayBubbles.map((bubble) => (
             <div
-              key={`${bubble.label}-${index}`}
+              key={bubble.label}
               className="aspect-square"
             >
               <BubbleWallChart

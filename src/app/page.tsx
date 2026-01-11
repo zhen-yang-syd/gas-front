@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { healthCheck, controlApi, analysisApi, SensorConfig } from "@/lib/api";
 
@@ -151,16 +151,8 @@ export default function Home() {
     }
   }, []);
 
-  // 获取气泡墙图数据
-  const fetchBubbleWall = useCallback(async () => {
-    try {
-      const data = await analysisApi.getBubbleWall();
-      setBubbleWall(data);
-      setLastUpdate(new Date().toLocaleTimeString());
-    } catch (e) {
-      console.error("Failed to fetch bubble wall:", e);
-    }
-  }, []);
+  // 注意：气泡墙数据完全由 SSE 推送，不再使用 REST API
+  // 原因：REST API 只返回 T-T 类型，SSE 返回 T-T + T-WD + T-FS，两者冲突会导致抖动
 
   // 获取相关性数据（合并到持久化缓存）
   const fetchCorrelations = useCallback(async () => {
@@ -246,18 +238,21 @@ export default function Home() {
   }, [sseConnected]);
 
   // 初始数据获取
+  // 注意：不调用 fetchBubbleWall()，气泡墙数据完全由 SSE 推送
+  // 原因：REST API /api/analysis/bubble-wall 只返回 T-T 类型，
+  //       而 SSE 推送 T-T + T-WD + T-FS 三种类型，两者会冲突
   useEffect(() => {
     if (apiStatus !== "connected") return;
 
     (async () => {
       await Promise.all([
         fetchStatus(),
-        fetchBubbleWall(),
+        // fetchBubbleWall() 移除 - 由 SSE 推送
         fetchCorrelations(),
         fetchPredictions(),
       ]);
     })();
-  }, [apiStatus, fetchStatus, fetchBubbleWall, fetchCorrelations, fetchPredictions]);
+  }, [apiStatus, fetchStatus, fetchCorrelations, fetchPredictions]);
 
   // SSE 实时数据流
   useEffect(() => {
@@ -285,7 +280,12 @@ export default function Home() {
             sseEventCount: prev.sseEventCount + 1,
           }));
 
-          if (data.bubble_wall) setBubbleWall(data.bubble_wall);
+          // 气泡墙数据：直接替换（后端已确保稳定的30对数据）
+          // 关键设计：后端使用预定义的固定传感器对列表，每次推送都包含完整的30对
+          // 因此前端无需合并逻辑，直接替换即可
+          if (data.bubble_wall?.bubbles) {
+            setBubbleWall(data.bubble_wall);
+          }
 
           // 合并新相关性到持久化缓存（累积而非覆盖）
           if (data.correlations) {
@@ -362,9 +362,8 @@ export default function Home() {
     const predictionInterval = setInterval(() => void fetchPredictions(), 30000); // 30秒更新预测
     const correlationInterval = setInterval(() => void fetchCorrelations(), 15000);
 
-    const fallbackInterval = setInterval(() => {
-      if (!sseConnectedRef.current) void fetchBubbleWall();
-    }, 15000);
+    // 移除 fallbackInterval - 气泡墙完全由 SSE 推送
+    // REST API 只返回 T-T，会覆盖 SSE 推送的 T-T + T-WD + T-FS 数据
 
     return () => {
       eventSource?.close();
@@ -372,9 +371,8 @@ export default function Home() {
       clearInterval(statusInterval);
       clearInterval(predictionInterval);
       clearInterval(correlationInterval);
-      clearInterval(fallbackInterval);
     };
-  }, [apiStatus, fetchStatus, fetchBubbleWall, fetchCorrelations, fetchPredictions]);
+  }, [apiStatus, fetchStatus, fetchCorrelations, fetchPredictions]);
 
   // 控制按钮处理
   const handleStart = async () => {
@@ -402,7 +400,7 @@ export default function Home() {
       await new Promise((resolve) => setTimeout(resolve, 500));
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/control/seek/500`, { method: "PUT" });
       await fetchStatus();
-      await fetchBubbleWall();
+      // fetchBubbleWall() 移除 - 气泡墙由 SSE 推送
       await fetchCorrelations();
       await fetchPredictions();
       setDemoMode("running");
@@ -412,13 +410,23 @@ export default function Home() {
     }
   };
 
-  const alertSensors = Object.entries(sensorData)
-    .filter(([, value]) => value > 0.8)
-    .map(([id]) => id);
+  const alertSensors = useMemo(() =>
+    Object.entries(sensorData)
+      .filter(([, value]) => value > 0.8)
+      .map(([id]) => id),
+    [sensorData]
+  );
 
   // 显示所有气泡的连线（不限于异常状态）
-  const alertPairs = bubbleWall?.bubbles
-    .map((b) => ({ sensor1: b.sensor_pair[0], sensor2: b.sensor_pair[1], cav: b.cav, status: b.status })) || [];
+  const alertPairs = useMemo(() => {
+    if (!bubbleWall?.bubbles) return [];
+    return bubbleWall.bubbles.map((b) => ({
+      sensor1: b.sensor_pair[0],
+      sensor2: b.sensor_pair[1],
+      cav: b.cav,
+      status: b.status,
+    }));
+  }, [bubbleWall]);
 
   return (
     <div className="min-h-screen bg-base">

@@ -269,19 +269,22 @@ export function MineMap({
   );
 
   // 渲染飞线 - 显示所有传感器对的连线
+  // 关键改进：使用传感器对作为稳定的 key，避免抖动
   const renderFlylines = () => (
     <g className="flylines">
-      {alertPairs.map((pair, index) => {
+      {alertPairs.map((pair) => {
         const pos1 = getSensorPosition(pair.sensor1);
         const pos2 = getSensorPosition(pair.sensor2);
 
         if (!pos1 || !pos2) return null;
 
         const color = getStatusColor(pair.status);
+        // 使用排序后的传感器对作为稳定 key
+        const stableKey = [pair.sensor1, pair.sensor2].sort().join("-");
 
         return (
           <Flyline
-            key={`flyline-${index}`}
+            key={`flyline-${stableKey}`}
             from={{ x: pos1.x, y: pos1.y }}
             to={{ x: pos2.x, y: pos2.y }}
             active={true}

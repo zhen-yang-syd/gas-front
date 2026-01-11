@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { formatSensorPairLabel } from "@/lib/sensors";
 
 interface BubbleWallChartProps {
   label: string;
@@ -79,6 +80,15 @@ export function BubbleWallChart({
   // 判断是否需要脉冲动画 (异常或警告状态)
   const shouldPulse = status.includes("ABNORMAL") || status.includes("WARNING");
 
+  // 将传感器对标签转换为简称
+  const shortLabel = useMemo(() => {
+    const parts = label.split("-");
+    if (parts.length === 2) {
+      return formatSensorPairLabel(parts[0], parts[1]);
+    }
+    return label;
+  }, [label]);
+
   // Hover 状态
   const [isHovered, setIsHovered] = useState(false);
 
@@ -100,7 +110,7 @@ export function BubbleWallChart({
       {/* Hover Tooltip */}
       {isHovered && (
         <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg shadow-lg text-xs whitespace-nowrap">
-          <div className="font-bold text-slate-200 mb-1">{label}</div>
+          <div className="font-bold text-slate-200 mb-1">{shortLabel}</div>
           <div className="space-y-0.5 text-slate-400">
             <div>
               CAV: <span className="text-white font-mono">{cav.toFixed(4)}</span>
@@ -267,15 +277,16 @@ export function BubbleWallChart({
         {cav.toFixed(2)}
       </text>
 
-      {/* 传感器对标签 */}
+      {/* 传感器对标签 - 使用简称 */}
       <text
         x="60"
         y="100"
-        fontSize="8"
+        fontSize="9"
         fill="#94A3B8"
         textAnchor="middle"
+        fontWeight="500"
       >
-        {label.length > 15 ? label.substring(0, 15) + "..." : label}
+        {shortLabel}
       </text>
 
       {/* 状态标签 */}

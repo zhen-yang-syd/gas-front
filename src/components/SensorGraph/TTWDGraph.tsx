@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { getSensorLabel, T_SENSORS, WD_SENSORS, formatSensorPairLabel } from "@/lib/sensors";
 
 interface CorrelationItem {
   sensor1: string;
@@ -16,24 +17,11 @@ interface TTWDGraphProps {
   height?: number;
 }
 
-// 固定传感器列表（与后端 config.py 一致）
-// 全部 T 传感器
-const ALL_T_SENSORS = [
-  "T010101", "T010102", "T010103", "T010104", "T010105", "T010106",
-  "T010201", "T010202", "T010203", "T010204", "T010205",
-  "T010301", "T010302", "T010303", "T010304", "T010305", "T010306", "T010307", "T010308",
-  "T010401", "T010501",
-];
-
 // 三列布局：列1=T全部，列2=T全部(副本)，列3=WD
-const T_COL1 = ALL_T_SENSORS;  // 列1：用于 T-T 连线的起点
-const T_COL2 = ALL_T_SENSORS;  // 列2：用于 T-T 连线的终点 + T-WD 连线的起点
-
-const WD_SENSORS = [
-  "WD010101", "WD010102", "WD010103", "WD010104", "WD010105", "WD010106",
-  "WD010107", "WD010108", "WD010109", "WD010110", "WD010111",
-  "WD010201", "WD010301", "WD010302", "WD010401", "WD010501",
-];
+// 使用从 sensors.ts 导入的传感器列表
+const T_COL1 = T_SENSORS;  // 列1：用于 T-T 连线的起点
+const T_COL2 = T_SENSORS;  // 列2：用于 T-T 连线的终点 + T-WD 连线的起点
+const WD_COL = WD_SENSORS; // 列3：WD传感器
 
 // Link 数据类型
 interface LinkData {
@@ -83,17 +71,6 @@ function getLinkStyle(r: number, hasData: boolean) {
   return { width: 0.8, opacity: 0.35, dash: "3,3", animated: false };
 }
 
-function shortenName(id: string): string {
-  return id
-    .replace("T0101", "T1.")
-    .replace("T0102", "T2.")
-    .replace("T0103", "T3.")
-    .replace("WD0101", "W1.")
-    .replace("WD0102", "W2.")
-    .replace("WD0103", "W3.")
-    .replace("WD0104", "W4.")
-    .replace("WD0105", "W5.");
-}
 
 /**
  * T-T-WD 关联图组件 (三列布局)
@@ -160,7 +137,7 @@ export function TTWDGraph({
   // 列2：全部T副本（T-T连线终点 + T-WD连线起点）
   const t2Nodes = calculateNodes(T_COL2, colX.T2, "T2");
   // 列3：WD
-  const wdNodes = calculateNodes(WD_SENSORS, colX.WD, "WD");
+  const wdNodes = calculateNodes(WD_COL, colX.WD, "WD");
 
   // 分别存储两列T的位置（用不同key区分）
   const nodePositions = useMemo(() => {
@@ -175,7 +152,7 @@ export function TTWDGraph({
   const tWdLinks = useMemo(() => {
     const links: LinkData[] = [];
     T_COL2.forEach((t) => {
-      WD_SENSORS.forEach((wd) => {
+      WD_COL.forEach((wd) => {
         const pos1 = nodePositions.get(`T2:${t}`);  // 列2的T
         const pos2 = nodePositions.get(`WD:${wd}`);
         if (!pos1 || !pos2) return;
@@ -376,7 +353,7 @@ export function TTWDGraph({
                 fontSize="6" fill="#cbd5e1"
                 textAnchor="end" fontFamily="var(--font-mono)"
               >
-                {shortenName(node.id)}
+                {getSensorLabel(node.id)}
               </text>
             </g>
           ))}
@@ -409,7 +386,7 @@ export function TTWDGraph({
                 fontSize="6" fill="#cbd5e1"
                 textAnchor="start" fontFamily="var(--font-mono)"
               >
-                {shortenName(node.id)}
+                {getSensorLabel(node.id)}
               </text>
             </g>
           ))}
@@ -428,7 +405,9 @@ export function TTWDGraph({
         className="mt-2 px-2 py-1.5 bg-elevated rounded text-xs font-mono"
         style={{ visibility: hoveredInfo ? "visible" : "hidden" }}
       >
-        <span className="text-soft">{hoveredInfo?.id.replace("-", " → ") || "—"}</span>
+        <span className="text-soft">
+          {hoveredInfo ? formatSensorPairLabel(hoveredInfo.id.split("-")[0], hoveredInfo.id.split("-")[1]) : "—"}
+        </span>
         <span className="ml-2 text-bright">r = {hoveredInfo?.r.toFixed(4) || "0.0000"}</span>
         <span className="ml-2" style={{ color: hoveredInfo ? LINK_COLORS[hoveredInfo.type as keyof typeof LINK_COLORS] : "#666" }}>
           [{hoveredInfo?.type || "T-T"}]
