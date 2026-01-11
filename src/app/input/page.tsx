@@ -159,9 +159,9 @@ export default function InputPage() {
               id: `cav-${Date.now()}`,
               timestamp: new Date().toLocaleTimeString(),
               type: "CAV",
-              value: data.cav?.cav,
-              threshold: data.cav?.calv,
-              message: `CAV(${data.cav?.cav?.toFixed(4)}) > CALV(${data.cav?.calv?.toFixed(4)})`,
+              value: data.alert?.cav,
+              threshold: data.alert?.calv,
+              message: `CAV(${data.alert?.cav?.toFixed(4)}) > CALV(${data.alert?.calv?.toFixed(4)})`,
               level: data.alert.level === "critical" ? "danger" : "warning",
             };
             setAlerts((prev) => {

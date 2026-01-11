@@ -115,14 +115,13 @@ export function BubbleWallGrid({
         </span>
       </div>
 
-      {/* 气泡墙图网格 - 使用 flex-wrap 自动换行，无滚动 */}
+      {/* 气泡墙图网格 - 使用 CSS Grid 固定5列布局 */}
       {displayBubbles.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5 justify-center">
+        <div className="grid grid-cols-5 gap-3">
           {displayBubbles.map((bubble, index) => (
             <div
               key={`${bubble.label}-${index}`}
-              className="shrink-0"
-              style={{ width: "55px" }}
+              className="aspect-square"
             >
               <BubbleWallChart
                 label={bubble.label}

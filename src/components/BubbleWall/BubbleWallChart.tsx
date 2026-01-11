@@ -41,20 +41,30 @@ export function BubbleWallChart({
     const wallBottom = 75; // LLV线Y坐标
     const wallHeight = wallBottom - wallTop;
 
+    // 安全检查：处理 NaN 或无效值
+    const safeCav = typeof cav === 'number' && !isNaN(cav) ? cav : 0.5;
+    const safeUlv = typeof ulv === 'number' && !isNaN(ulv) ? ulv : 0.95;
+    const safeLlv = typeof llv === 'number' && !isNaN(llv) ? llv : 0.85;
+
+    // 防止除零：ulv === llv 时返回中间位置
+    if (safeUlv <= safeLlv) {
+      return (wallTop + wallBottom) / 2;
+    }
+
     // 正常范围内: 线性映射
-    if (cav >= llv && cav <= ulv) {
-      const ratio = (ulv - cav) / (ulv - llv);
+    if (safeCav >= safeLlv && safeCav <= safeUlv) {
+      const ratio = (safeUlv - safeCav) / (safeUlv - safeLlv);
       return wallTop + ratio * wallHeight;
     }
 
     // 超过上限: 气泡向上移动
-    if (cav > ulv) {
-      const excess = Math.min((cav - ulv) / 0.3, 1); // 最多移动到顶部
+    if (safeCav > safeUlv) {
+      const excess = Math.min((safeCav - safeUlv) / 0.3, 1); // 最多移动到顶部
       return Math.max(8, wallTop - excess * 17);
     }
 
     // 低于下限: 气泡向下移动
-    const deficit = Math.min((llv - cav) / 0.3, 1);
+    const deficit = Math.min((safeLlv - safeCav) / 0.3, 1);
     return Math.min(92, wallBottom + deficit * 17);
   }, [cav, ulv, llv]);
 

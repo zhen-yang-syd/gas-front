@@ -16,12 +16,13 @@ interface PredictionChartProps {
 }
 
 /**
- * 预测曲线组件
+ * 实时预测曲线组件
  *
  * 显示:
- * - 左侧: 历史数据（黑色实线）
- * - 右侧: 预测数据（粉色虚线）
- * - 中间: 当前时间分隔线
+ * - 历史数据（青色渐变实线）
+ * - 预测数据（橙/红/绿色虚线，根据趋势）
+ * - 当前时间分隔线
+ * - 实时滚动更新
  */
 export function PredictionChart({
   sensorId,
@@ -29,66 +30,95 @@ export function PredictionChart({
   prediction,
   trend = "stable",
   confidence = 0.5,
-  height = 100,
+  height = 160,
 }: PredictionChartProps) {
   const option = useMemo(() => {
     const historyLen = history.length;
     const predictionLen = prediction.length;
-    const totalLen = historyLen + predictionLen;
 
-    // 生成X轴标签
+    // 计算数据范围（用于动态Y轴，确保曲线不贴底）
+    const allValues = [...history, ...prediction].filter(v => v !== null && v !== undefined);
+    const minVal = allValues.length > 0 ? Math.min(...allValues) : 0;
+    const maxVal = allValues.length > 0 ? Math.max(...allValues) : 1;
+    const range = maxVal - minVal;
+    // 确保至少有 15% 或 0.02 的边距，防止曲线贴底
+    const padding = Math.max(range * 0.15, 0.02);
+    const yMin = Math.max(0, minVal - padding);
+    const yMax = Math.max(yMin + 0.1, maxVal + padding);
+
+    // 生成时间标签（相对时间）
     const xAxisData = [
-      ...history.map((_, i) => `H${historyLen - i}`),
-      ...prediction.map((_, i) => `P${i + 1}`),
+      ...history.map((_, i) => {
+        const secAgo = (historyLen - i - 1);
+        if (secAgo === 0) return "现在";
+        if (secAgo < 60) return `-${secAgo}s`;
+        return `-${Math.floor(secAgo / 60)}m`;
+      }),
+      ...prediction.map((_, i) => `+${(i + 1) * 5}m`),
     ];
 
     // 历史数据系列
     const historyData = [...history, ...Array(predictionLen).fill(null)];
 
     // 预测数据系列（从最后一个历史点连接）
-    const predictionData = [
-      ...Array(historyLen - 1).fill(null),
-      history[historyLen - 1], // 连接点
-      ...prediction,
-    ];
+    const predictionData = historyLen > 0
+      ? [
+          ...Array(historyLen - 1).fill(null),
+          history[historyLen - 1], // 连接点
+          ...prediction,
+        ]
+      : prediction;
 
     // 趋势颜色
     const trendColors: Record<string, string> = {
-      rising: "#EF4444", // 红色 - 上升趋势（危险）
-      falling: "#10B981", // 绿色 - 下降趋势（安全）
-      stable: "#F59E0B", // 橙色 - 稳定
+      rising: "#EF4444",   // 红色 - 上升趋势（危险）
+      falling: "#10B981",  // 绿色 - 下降趋势（安全）
+      stable: "#F59E0B",   // 橙色 - 稳定
     };
+
+    // 当前值
+    const currentValue = historyLen > 0 ? history[historyLen - 1] : null;
 
     return {
       backgroundColor: "transparent",
+      animation: true,
+      animationDuration: 300,
       title: {
         text: sensorId.replace("T0", "T"),
-        left: 5,
-        top: 0,
+        subtext: currentValue !== null ? `${currentValue.toFixed(3)}%` : "",
+        left: 8,
+        top: 5,
         textStyle: {
+          fontSize: 13,
+          color: "#E2E8F0",
+          fontWeight: "bold",
+        },
+        subtextStyle: {
           fontSize: 11,
-          color: "#94A3B8",
-          fontWeight: "normal",
+          color: "#06B6D4",
+          fontWeight: "bold",
         },
       },
       grid: {
-        top: 25,
-        right: 10,
-        bottom: 20,
-        left: 35,
+        top: 45,
+        right: 15,
+        bottom: 30,
+        left: 45,
       },
       tooltip: {
         trigger: "axis",
         backgroundColor: "#1E293B",
         borderColor: "#475569",
-        textStyle: { color: "#E2E8F0", fontSize: 10 },
-        formatter: (params: any[]) => {
-          const lines = params.map((p) => {
+        textStyle: { color: "#E2E8F0", fontSize: 11 },
+        formatter: (params: unknown) => {
+          const paramsArray = params as Array<{ seriesName: string; value: number | null | undefined; axisValue: string }>;
+          const lines = paramsArray.map((p) => {
             if (p.value === null || p.value === undefined) return "";
-            const type = p.seriesName === "历史" ? "历史" : "预测";
-            return `${type}: ${p.value.toFixed(3)}%`;
+            const type = p.seriesName === "实时" ? "实时" : "预测";
+            const color = type === "实时" ? "#06B6D4" : trendColors[trend];
+            return `<span style="color:${color}">●</span> ${type}: <b>${p.value.toFixed(4)}%</b>`;
           });
-          return lines.filter(Boolean).join("<br/>");
+          return `<div style="font-family:monospace">${paramsArray[0]?.axisValue || ""}<br/>${lines.filter(Boolean).join("<br/>")}</div>`;
         },
       },
       xAxis: {
@@ -97,47 +127,47 @@ export function PredictionChart({
         axisLine: { lineStyle: { color: "#475569" } },
         axisTick: { show: false },
         axisLabel: {
-          show: false, // 隐藏X轴标签以节省空间
+          fontSize: 9,
+          color: "#64748B",
+          interval: (index: number) => {
+            // 显示关键点：开始、现在、结束
+            if (index === 0) return true;
+            if (index === historyLen - 1) return true;
+            if (index === historyLen + predictionLen - 1) return true;
+            // 每10个点显示一个
+            return index % 10 === 0;
+          },
         },
         splitLine: { show: false },
       },
       yAxis: {
         type: "value",
-        min: 0,
-        max: (value: { max: number }) => Math.max(1, value.max * 1.2),
+        min: yMin,
+        max: yMax,
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: {
-          fontSize: 9,
+          fontSize: 10,
           color: "#64748B",
-          formatter: (v: number) => v.toFixed(1),
+          formatter: (v: number) => v.toFixed(2) + "%",
         },
         splitLine: {
-          lineStyle: { color: "#334155", type: "dashed" },
+          lineStyle: { color: "#334155", type: "dashed", opacity: 0.5 },
         },
+        splitNumber: 4,
       },
       series: [
         {
-          name: "历史",
+          name: "实时",
           type: "line",
           data: historyData,
-          lineStyle: { color: "#1F2937", width: 2 },
-          itemStyle: { color: "#1F2937" },
-          symbol: "none",
-          smooth: true,
-        },
-        {
-          name: "预测",
-          type: "line",
-          data: predictionData,
           lineStyle: {
-            color: trendColors[trend],
-            width: 2,
-            type: "dashed",
+            color: "#06B6D4",
+            width: 2.5,
           },
-          itemStyle: { color: trendColors[trend] },
+          itemStyle: { color: "#06B6D4" },
           symbol: "none",
-          smooth: true,
+          smooth: 0.3,
           areaStyle: {
             color: {
               type: "linear",
@@ -146,69 +176,103 @@ export function PredictionChart({
               x2: 0,
               y2: 1,
               colorStops: [
-                { offset: 0, color: `${trendColors[trend]}33` },
-                { offset: 1, color: `${trendColors[trend]}00` },
+                { offset: 0, color: "rgba(6, 182, 212, 0.3)" },
+                { offset: 1, color: "rgba(6, 182, 212, 0.02)" },
+              ],
+            },
+          },
+        },
+        {
+          name: "预测",
+          type: "line",
+          data: predictionData,
+          lineStyle: {
+            color: trendColors[trend],
+            width: 2.5,
+          },
+          itemStyle: { color: trendColors[trend] },
+          symbol: predictionLen > 0 ? "circle" : "none",
+          symbolSize: 4,
+          smooth: 0.3,
+          areaStyle: {
+            color: {
+              type: "linear",
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: `${trendColors[trend]}40` },
+                { offset: 1, color: `${trendColors[trend]}05` },
               ],
             },
           },
         },
       ],
       // 当前时间标记线
-      markLine: {
+      markLine: historyLen > 0 ? {
         silent: true,
+        symbol: "none",
         data: [
           {
             xAxis: historyLen - 1,
-            lineStyle: { color: "#EF4444", type: "solid", width: 1 },
+            lineStyle: { color: "#94A3B8", type: "solid", width: 1.5 },
             label: {
-              formatter: "现在",
-              position: "start",
-              fontSize: 8,
-              color: "#EF4444",
+              show: false,
             },
           },
         ],
-      },
+      } : undefined,
     };
   }, [sensorId, history, prediction, trend]);
 
-  // 趋势图标
-  const trendIcon = useMemo(() => {
-    switch (trend) {
-      case "rising":
-        return "↑";
-      case "falling":
-        return "↓";
-      default:
-        return "→";
-    }
-  }, [trend]);
-
-  const trendColor = useMemo(() => {
-    switch (trend) {
-      case "rising":
-        return "text-red-500";
-      case "falling":
-        return "text-green-500";
-      default:
-        return "text-yellow-500";
-    }
+  // 趋势信息
+  const trendInfo = useMemo(() => {
+    const icons: Record<string, string> = {
+      rising: "↗",
+      falling: "↘",
+      stable: "→",
+    };
+    const colors: Record<string, string> = {
+      rising: "text-red-400",
+      falling: "text-green-400",
+      stable: "text-yellow-400",
+    };
+    const labels: Record<string, string> = {
+      rising: "上升",
+      falling: "下降",
+      stable: "稳定",
+    };
+    return { icon: icons[trend], color: colors[trend], label: labels[trend] };
   }, [trend]);
 
   return (
-    <div className="prediction-chart bg-slate-900 rounded border border-slate-700 p-2">
+    <div className="prediction-chart bg-slate-900/80 rounded-lg border border-slate-700/50 p-2 backdrop-blur">
       <ReactECharts
         option={option}
         style={{ height: height, width: "100%" }}
         opts={{ renderer: "canvas" }}
       />
-      <div className="flex justify-between items-center mt-1 px-1 text-xs">
-        <span className={`${trendColor} font-medium`}>
-          {trendIcon} {trend === "rising" ? "上升" : trend === "falling" ? "下降" : "稳定"}
-        </span>
-        <span className="text-slate-500">
-          置信度: {(confidence * 100).toFixed(0)}%
-        </span>
+      <div className="flex justify-between items-center px-2 text-xs">
+        <div className="flex items-center gap-2">
+          <span className={`${trendInfo.color} font-bold text-sm`}>
+            {trendInfo.icon}
+          </span>
+          <span className="text-slate-400">{trendInfo.label}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-slate-500">
+            历史: <span className="text-cyan-400 font-mono">{history.length}</span>
+          </span>
+          {prediction.length > 0 && (
+            <span className="text-slate-500">
+              预测: <span className={`${trendInfo.color} font-mono`}>{prediction.length}</span>
+            </span>
+          )}
+          <span className="text-slate-500">
+            置信: <span className="text-slate-300 font-mono">{(confidence * 100).toFixed(0)}%</span>
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -4,12 +4,22 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { healthCheck, analysisApi } from "@/lib/api";
 
+interface GroupValidityDetail {
+  overall_valid: boolean;
+  cronbach_alpha?: { value: number; threshold: number; passed: boolean; interpretation?: string };
+  kmo?: { value: number; threshold: number; passed: boolean; interpretation?: string };
+  bartlett?: { chi_square: number; p_value: number; threshold: number; passed: boolean };
+  communality?: { mean: number; avg_value?: number; threshold: number; passed: boolean };
+  adequate_sensors?: string[];
+  inadequate_sensors?: { id: string; msa: number; reason: string }[];
+}
+
 interface ValidityResult {
   overall_valid: boolean;
-  cronbach_alpha?: { value: number; threshold: number; passed: boolean };
-  kmo?: { value: number; threshold: number; passed: boolean };
-  bartlett?: { statistic: number; p_value: number; threshold: number; passed: boolean };
-  communality?: { mean: number; threshold: number; passed: boolean };
+  cronbach_alpha?: { value: number; threshold: number; passed: boolean; interpretation?: string };
+  kmo?: { value: number; threshold: number; passed: boolean; interpretation?: string };
+  bartlett?: { chi_square?: number; statistic?: number; p_value: number; threshold: number; passed: boolean };
+  communality?: { mean: number; avg_value?: number; threshold: number; passed: boolean };
   adequate_sensors?: string[];
   inadequate_sensors?: { id: string; msa: number; reason: string }[];
   validation_type?: string;  // "grouped" for T-WD/T-FS
@@ -18,17 +28,23 @@ interface ValidityResult {
     WD_valid?: boolean;
     FS_valid?: boolean;
   };
+  // 分组验证详情
+  T_group?: GroupValidityDetail;
+  WD_group?: GroupValidityDetail;
+  FS_group?: GroupValidityDetail;
 }
 
 interface FSVResult {
-  round1_pairs: { sensor1: string; sensor2: string; r: number }[];
-  round2_pairs: { sensor1: string; sensor2: string; r: number }[];
-  verified_pairs: { sensor1: string; sensor2: string; r1: number; r2: number }[];
-  dropped_pairs: { sensor1: string; sensor2: string; reason: string }[];
+  round1_pairs: [string, string][];  // API 返回元组数组
+  round2_pairs: [string, string][];
+  verified_pairs: [string, string][];
+  dropped_pairs: [string, string][];
   verification_rate: number;
   adequate_sensors?: string[];
   adequate_count?: number;
   total_sensors?: number;
+  sensors_used?: number;
+  validity_warning?: string;
 }
 
 interface CorrelationItem {
@@ -96,12 +112,18 @@ export default function AdminPage() {
   useEffect(() => {
     if (apiStatus !== "connected") return;
 
-    fetchData();
+    // 使用 setTimeout 延迟初始调用，避免在 effect 中同步调用 setState
+    const initialFetch = setTimeout(fetchData, 0);
 
     if (autoRefresh) {
       const interval = setInterval(fetchData, 30000);
-      return () => clearInterval(interval);
+      return () => {
+        clearTimeout(initialFetch);
+        clearInterval(interval);
+      };
     }
+
+    return () => clearTimeout(initialFetch);
   }, [apiStatus, autoRefresh, fetchData]);
 
   // 获取验证指标卡片
@@ -133,6 +155,33 @@ export default function AdminPage() {
   };
 
   const currentValidity = validity[selectedType];
+
+  // 获取验证失败原因的辅助函数
+  const getFailureReasons = (v: GroupValidityDetail | ValidityResult | undefined): string => {
+    if (!v) return "无数据";
+    const reasons: string[] = [];
+
+    if (v.cronbach_alpha && !v.cronbach_alpha.passed) {
+      const val = v.cronbach_alpha.value;
+      if (val < 0) {
+        reasons.push(`Cronbach's Alpha=${val.toFixed(3)} (负值表示传感器间存在负相关，数据质量差)`);
+      } else {
+        reasons.push(`Cronbach's Alpha=${val.toFixed(3)} < 0.6 (内部一致性不足)`);
+      }
+    }
+    if (v.kmo && !v.kmo.passed) {
+      reasons.push(`KMO=${v.kmo.value.toFixed(3)} < 0.6 (抽样适当性不足)`);
+    }
+    if (v.bartlett && !v.bartlett.passed) {
+      reasons.push(`Bartlett p=${v.bartlett.p_value.toFixed(4)} > 0.001 (变量间相关性不显著)`);
+    }
+    if (v.communality && !v.communality.passed) {
+      const commVal = v.communality.mean ?? v.communality.avg_value ?? 0;
+      reasons.push(`Communality=${commVal.toFixed(3)} < 0.6 (共同性不足)`);
+    }
+
+    return reasons.length > 0 ? reasons.join("; ") : "未知原因";
+  };
 
   return (
     <div className="min-h-screen bg-base">
@@ -185,36 +234,100 @@ export default function AdminPage() {
         </div>
 
         <div className="grid grid-cols-12 gap-4">
-          {/* 信效度验证结果 - 四个指标卡片 */}
+          {/* 信效度验证结果 */}
           <div className="col-span-12">
             <div className="industrial-card p-4 mb-4">
               <div className="industrial-title text-xs mb-4">信效度验证 - {selectedType}</div>
-              <div className="grid grid-cols-4 gap-4">
-                {renderValidityCard(
-                  "Cronbach's Alpha",
-                  currentValidity?.cronbach_alpha?.value,
-                  currentValidity?.cronbach_alpha?.threshold || 0.6,
-                  currentValidity?.cronbach_alpha?.passed
-                )}
-                {renderValidityCard(
-                  "KMO",
-                  currentValidity?.kmo?.value,
-                  currentValidity?.kmo?.threshold || 0.6,
-                  currentValidity?.kmo?.passed
-                )}
-                {renderValidityCard(
-                  "Bartlett p-value",
-                  currentValidity?.bartlett?.p_value,
-                  currentValidity?.bartlett?.threshold || 0.001,
-                  currentValidity?.bartlett?.passed
-                )}
-                {renderValidityCard(
-                  "Communality",
-                  currentValidity?.communality?.mean,
-                  currentValidity?.communality?.threshold || 0.6,
-                  currentValidity?.communality?.passed
-                )}
-              </div>
+
+              {/* 分组验证：显示两组对比 */}
+              {currentValidity?.validation_type === "grouped" ? (
+                <div className="space-y-4">
+                  {/* T 组 */}
+                  <div className="p-3 bg-tertiary/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${currentValidity.T_group?.overall_valid ? "bg-normal/20 text-ok" : "bg-danger/20 text-err"}`}>
+                        T组 {currentValidity.T_group?.overall_valid ? "✓ 通过" : "✗ 失败"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-3">
+                      {renderValidityCard("Cronbach", currentValidity.T_group?.cronbach_alpha?.value, 0.6, currentValidity.T_group?.cronbach_alpha?.passed)}
+                      {renderValidityCard("KMO", currentValidity.T_group?.kmo?.value, 0.6, currentValidity.T_group?.kmo?.passed)}
+                      {renderValidityCard("Bartlett", currentValidity.T_group?.bartlett?.p_value, 0.001, currentValidity.T_group?.bartlett?.passed)}
+                      {renderValidityCard("Communality", currentValidity.T_group?.communality?.mean ?? currentValidity.T_group?.communality?.avg_value, 0.6, currentValidity.T_group?.communality?.passed)}
+                    </div>
+                    {/* T组失败原因 */}
+                    {!currentValidity.T_group?.overall_valid && (
+                      <div className="mt-2 p-2 bg-danger/10 rounded text-xs text-err">
+                        <span className="font-bold">失败原因: </span>
+                        {getFailureReasons(currentValidity.T_group)}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* WD/FS 组 */}
+                  {selectedType === "T-WD" && currentValidity.WD_group && (
+                    <div className="p-3 bg-tertiary/30 rounded-lg">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${currentValidity.WD_group?.overall_valid ? "bg-normal/20 text-ok" : "bg-danger/20 text-err"}`}>
+                          WD组 {currentValidity.WD_group?.overall_valid ? "✓ 通过" : "✗ 失败"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-3">
+                        {renderValidityCard("Cronbach", currentValidity.WD_group?.cronbach_alpha?.value, 0.6, currentValidity.WD_group?.cronbach_alpha?.passed)}
+                        {renderValidityCard("KMO", currentValidity.WD_group?.kmo?.value, 0.6, currentValidity.WD_group?.kmo?.passed)}
+                        {renderValidityCard("Bartlett", currentValidity.WD_group?.bartlett?.p_value, 0.001, currentValidity.WD_group?.bartlett?.passed)}
+                        {renderValidityCard("Communality", currentValidity.WD_group?.communality?.mean ?? currentValidity.WD_group?.communality?.avg_value, 0.6, currentValidity.WD_group?.communality?.passed)}
+                      </div>
+                      {/* WD组失败原因 */}
+                      {!currentValidity.WD_group?.overall_valid && (
+                        <div className="mt-2 p-2 bg-danger/10 rounded text-xs text-err">
+                          <span className="font-bold">失败原因: </span>
+                          {getFailureReasons(currentValidity.WD_group)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {selectedType === "T-FS" && currentValidity.FS_group && (
+                    <div className="p-3 bg-tertiary/30 rounded-lg">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${currentValidity.FS_group?.overall_valid ? "bg-normal/20 text-ok" : "bg-danger/20 text-err"}`}>
+                          FS组 {currentValidity.FS_group?.overall_valid ? "✓ 通过" : "✗ 失败"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-3">
+                        {renderValidityCard("Cronbach", currentValidity.FS_group?.cronbach_alpha?.value, 0.6, currentValidity.FS_group?.cronbach_alpha?.passed)}
+                        {renderValidityCard("KMO", currentValidity.FS_group?.kmo?.value, 0.6, currentValidity.FS_group?.kmo?.passed)}
+                        {renderValidityCard("Bartlett", currentValidity.FS_group?.bartlett?.p_value, 0.001, currentValidity.FS_group?.bartlett?.passed)}
+                        {renderValidityCard("Communality", currentValidity.FS_group?.communality?.mean ?? currentValidity.FS_group?.communality?.avg_value, 0.6, currentValidity.FS_group?.communality?.passed)}
+                      </div>
+                      {/* FS组失败原因 */}
+                      {!currentValidity.FS_group?.overall_valid && (
+                        <div className="mt-2 p-2 bg-danger/10 rounded text-xs text-err">
+                          <span className="font-bold">失败原因: </span>
+                          {getFailureReasons(currentValidity.FS_group)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* 非分组验证：原有显示方式 */
+                <div>
+                  <div className="grid grid-cols-4 gap-4">
+                    {renderValidityCard("Cronbach's Alpha", currentValidity?.cronbach_alpha?.value, currentValidity?.cronbach_alpha?.threshold || 0.6, currentValidity?.cronbach_alpha?.passed)}
+                    {renderValidityCard("KMO", currentValidity?.kmo?.value, currentValidity?.kmo?.threshold || 0.6, currentValidity?.kmo?.passed)}
+                    {renderValidityCard("Bartlett p-value", currentValidity?.bartlett?.p_value, currentValidity?.bartlett?.threshold || 0.001, currentValidity?.bartlett?.passed)}
+                    {renderValidityCard("Communality", currentValidity?.communality?.mean, currentValidity?.communality?.threshold || 0.6, currentValidity?.communality?.passed)}
+                  </div>
+                  {/* 失败原因 */}
+                  {currentValidity && !currentValidity.overall_valid && (
+                    <div className="mt-3 p-2 bg-danger/10 rounded text-xs text-err">
+                      <span className="font-bold">失败原因: </span>
+                      {getFailureReasons(currentValidity)}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 整体验证状态 */}
               <div className="mt-4 pt-4 border-t border-edge flex items-center justify-between">
@@ -223,24 +336,6 @@ export default function AdminPage() {
                   <span className={`px-3 py-1 rounded text-xs font-mono ${currentValidity?.overall_valid ? "bg-normal/20 text-ok border border-normal" : "bg-danger/20 text-err border border-danger"}`}>
                     {currentValidity?.overall_valid ? "已验证" : "未验证"}
                   </span>
-                  {/* 分组验证详情 */}
-                  {currentValidity?.validation_type === "grouped" && currentValidity?.group_summary && (
-                    <div className="flex items-center gap-2 ml-2">
-                      <span className={`px-2 py-0.5 rounded text-xs font-mono ${currentValidity.group_summary.T_valid ? "bg-normal/20 text-ok" : "bg-danger/20 text-err"}`}>
-                        T组 {currentValidity.group_summary.T_valid ? "✓" : "✗"}
-                      </span>
-                      {selectedType === "T-WD" && (
-                        <span className={`px-2 py-0.5 rounded text-xs font-mono ${currentValidity.group_summary.WD_valid ? "bg-normal/20 text-ok" : "bg-danger/20 text-err"}`}>
-                          WD组 {currentValidity.group_summary.WD_valid ? "✓" : "✗"}
-                        </span>
-                      )}
-                      {selectedType === "T-FS" && (
-                        <span className={`px-2 py-0.5 rounded text-xs font-mono ${currentValidity.group_summary.FS_valid ? "bg-normal/20 text-ok" : "bg-danger/20 text-err"}`}>
-                          FS组 {currentValidity.group_summary.FS_valid ? "✓" : "✗"}
-                        </span>
-                      )}
-                    </div>
-                  )}
                 </div>
                 {currentValidity?.adequate_sensors && (
                   <span className="text-xs text-dim">
@@ -268,14 +363,13 @@ export default function AdminPage() {
                   <div className="grid grid-cols-2 gap-4">
                     {/* 第一轮 */}
                     <div>
-                      <div className="text-xs text-dim mb-2 font-mono">第一轮 (0-15秒)</div>
+                      <div className="text-xs text-dim mb-2 font-mono">第一轮 ({fsv.round1_pairs.length}对)</div>
                       <div className="space-y-1">
                         {fsv.round1_pairs.slice(0, 15).map((pair, idx) => (
                           <div key={idx} className="flex items-center justify-between px-2 py-1 bg-tertiary/50 rounded text-xs">
                             <span className="font-mono text-soft">
-                              {pair.sensor1.slice(-4)}-{pair.sensor2.slice(-4)}
+                              {pair[0]?.slice(-4) || "?"}-{pair[1]?.slice(-4) || "?"}
                             </span>
-                            <span className="font-mono text-bright">{pair.r.toFixed(3)}</span>
                           </div>
                         ))}
                       </div>
@@ -283,14 +377,13 @@ export default function AdminPage() {
 
                     {/* 第二轮 */}
                     <div>
-                      <div className="text-xs text-dim mb-2 font-mono">第二轮 (15-30秒)</div>
+                      <div className="text-xs text-dim mb-2 font-mono">第二轮 ({fsv.round2_pairs.length}对)</div>
                       <div className="space-y-1">
                         {fsv.round2_pairs.slice(0, 15).map((pair, idx) => (
                           <div key={idx} className="flex items-center justify-between px-2 py-1 bg-tertiary/50 rounded text-xs">
                             <span className="font-mono text-soft">
-                              {pair.sensor1.slice(-4)}-{pair.sensor2.slice(-4)}
+                              {pair[0]?.slice(-4) || "?"}-{pair[1]?.slice(-4) || "?"}
                             </span>
-                            <span className="font-mono text-bright">{pair.r.toFixed(3)}</span>
                           </div>
                         ))}
                       </div>

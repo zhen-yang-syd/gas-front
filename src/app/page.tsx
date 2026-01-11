@@ -120,6 +120,10 @@ export default function Home() {
   const [sensorConfig, setSensorConfig] = useState<SensorConfig | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
   const sseConnectedRef = useRef(false);
+
+  // 累积传感器历史数据（用于实时预测曲线）
+  const [sensorHistory, setSensorHistory] = useState<Record<string, number[]>>({});
+  const HISTORY_WINDOW_SIZE = 180; // 保留最近180个点
   const [showDebug, setShowDebug] = useState(false);
   const [debugData, setDebugData] = useState<{
     lastSseData: Record<string, unknown> | null;
@@ -186,7 +190,7 @@ export default function Home() {
     }
   }, []);
 
-  // 获取预测数据（显示所有20个T传感器）
+  // 获取预测数据（使用累积的SSE历史 + API预测）
   const fetchPredictions = useCallback(async () => {
     const sensors = sensorConfig?.available?.T || [];
     if (sensors.length === 0) return;
@@ -195,23 +199,47 @@ export default function Home() {
 
     for (const sensor of sensors) {
       try {
+        // 优先使用累积的SSE历史数据
+        const localHistory = sensorHistory[sensor] || [];
+
         const data = await analysisApi.getPrediction(sensor);
         if (data && !data.error) {
           results.push({
             sensor_id: data.sensor_id,
-            history: data.history || [],
+            // 使用本地累积的实时历史（如果有足够数据），显示30个点让预测占比更大
+            history: localHistory.length >= 30 ? localHistory.slice(-30) : (data.history?.slice(-30) || []),
             prediction: data.prediction || [],
             trend: data.trend || "stable",
             confidence: data.confidence || 0.5,
           });
+        } else if (localHistory.length >= 10) {
+          // 即使API失败，也显示本地历史数据
+          results.push({
+            sensor_id: sensor,
+            history: localHistory.slice(-30),
+            prediction: [],
+            trend: "stable",
+            confidence: 0.5,
+          });
         }
       } catch (e) {
         console.error(`Failed to fetch prediction for ${sensor}:`, e);
+        // 使用本地历史数据作为降级方案
+        const localHistory = sensorHistory[sensor] || [];
+        if (localHistory.length >= 10) {
+          results.push({
+            sensor_id: sensor,
+            history: localHistory.slice(-30),
+            prediction: [],
+            trend: "stable",
+            confidence: 0.5,
+          });
+        }
       }
     }
 
     setPredictions(results);
-  }, [sensorConfig]);
+  }, [sensorConfig, sensorHistory]);
 
   useEffect(() => {
     sseConnectedRef.current = sseConnected;
@@ -291,7 +319,25 @@ export default function Home() {
             });
           }
 
-          if (data.sensor_readings) setSensorData(data.sensor_readings);
+          if (data.sensor_readings) {
+            setSensorData(data.sensor_readings);
+            // 累积传感器历史数据（滚动窗口）
+            setSensorHistory(prev => {
+              const newHistory = { ...prev };
+              Object.entries(data.sensor_readings as Record<string, number>).forEach(([sensorId, value]) => {
+                if (sensorId.startsWith("T") && typeof value === "number" && !isNaN(value)) {
+                  const history = newHistory[sensorId] || [];
+                  history.push(value);
+                  // 保持窗口大小
+                  if (history.length > HISTORY_WINDOW_SIZE) {
+                    history.shift();
+                  }
+                  newHistory[sensorId] = history;
+                }
+              });
+              return newHistory;
+            });
+          }
           setLastUpdate(new Date().toLocaleTimeString());
         } catch (e) {
           console.error("Failed to parse SSE data:", e);
@@ -313,7 +359,7 @@ export default function Home() {
     connectSSE();
 
     const statusInterval = setInterval(() => void fetchStatus(), 2000);
-    const predictionInterval = setInterval(() => void fetchPredictions(), 60000);
+    const predictionInterval = setInterval(() => void fetchPredictions(), 30000); // 30秒更新预测
     const correlationInterval = setInterval(() => void fetchCorrelations(), 15000);
 
     const fallbackInterval = setInterval(() => {
@@ -601,13 +647,16 @@ export default function Home() {
           {/* 右侧 - 预测面板（20个T传感器） */}
           <div className="col-span-3 flex flex-col max-h-[calc(100vh-180px)]">
             <div className="industrial-card p-3 overflow-hidden h-full">
-              <div className="industrial-title text-xs mb-2">瓦斯浓度预测 (SVM)</div>
-              <div className="text-xs text-dim mb-2 font-mono">
-                {predictions.length} / {sensorConfig?.available?.T?.length || 0} 传感器
+              <div className="industrial-title text-xs mb-2">瓦斯浓度实时预测</div>
+              <div className="flex items-center justify-between text-xs text-dim mb-2 font-mono">
+                <span>{predictions.length} / {sensorConfig?.available?.T?.length || 0} 传感器</span>
+                <span className="text-cyan-400">
+                  历史: {Object.values(sensorHistory)[0]?.length || 0} / {HISTORY_WINDOW_SIZE}
+                </span>
               </div>
               <div className="overflow-y-auto h-[calc(100%-50px)] pr-1 custom-scrollbar">
                 {predictions.length > 0 ? (
-                  <PredictionGrid predictions={predictions} columns={1} />
+                  <PredictionGrid predictions={predictions} columns={1} chartHeight={140} />
                 ) : (
                   <div className="space-y-2">
                     {(sensorConfig?.available?.T?.slice(0, 6) || ["T010101", "T010102", "T010103", "T010104", "T010105", "T010106"]).map((sensor) => (
