@@ -80,6 +80,9 @@ export function PredictionChart({
     // 当前值
     const currentValue = historyLen > 0 ? history[historyLen - 1] : null;
 
+    // 计算峰值
+    const peakValue = historyLen > 0 ? Math.max(...history) : null;
+
     return {
       backgroundColor: "transparent",
       animation: true,
@@ -182,6 +185,27 @@ export function PredictionChart({
               ],
             },
           },
+          // 峰值标注线
+          markLine: peakValue !== null ? {
+            silent: true,
+            symbol: "none",
+            data: [
+              {
+                yAxis: peakValue,
+                lineStyle: { color: "#F87171", type: "dashed", width: 1.5 },
+                label: {
+                  show: true,
+                  position: "insideEndTop",
+                  formatter: `峰值: ${peakValue.toFixed(3)}%`,
+                  color: "#F87171",
+                  fontSize: 10,
+                  backgroundColor: "rgba(30, 41, 59, 0.8)",
+                  padding: [2, 4],
+                  borderRadius: 2,
+                },
+              },
+            ],
+          } : undefined,
         },
         {
           name: "预测",
