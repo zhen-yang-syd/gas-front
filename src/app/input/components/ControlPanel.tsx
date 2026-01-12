@@ -3,8 +3,8 @@
 import React, { useState } from "react";
 
 interface ControlPanelProps {
-  frequency: number;
-  onFrequencyChange: (freq: number) => void;
+  ratePerMinute: number;
+  onRateChange: (rate: number) => void;
   onStart: () => void;
   onStop: () => void;
   onReset: () => void;
@@ -14,17 +14,9 @@ interface ControlPanelProps {
   totalRows: number;
 }
 
-const FREQUENCIES = [
-  { value: 1, label: "1 条/秒" },
-  { value: 10, label: "10 条/秒" },
-  { value: 50, label: "50 条/秒" },
-  { value: 100, label: "100 条/秒" },
-  { value: 200, label: "200 条/秒" },
-];
-
 export const ControlPanel: React.FC<ControlPanelProps> = ({
-  frequency,
-  onFrequencyChange,
+  ratePerMinute,
+  onRateChange,
   onStart,
   onStop,
   onReset,
@@ -33,7 +25,16 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   isCompleted,
   totalRows,
 }) => {
+  const [rateInput, setRateInput] = useState(ratePerMinute.toString());
   const [jumpInput, setJumpInput] = useState("");
+
+  const handleRateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const rate = parseInt(rateInput, 10);
+    if (rate > 0) {
+      onRateChange(rate);
+    }
+  };
 
   const handleJumpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,23 +52,26 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
       {/* 更新频率 */}
       <div className="mb-4">
         <label className="text-xs text-dim mb-2 block">更新频率</label>
-        <div className="flex gap-2">
-          {FREQUENCIES.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => onFrequencyChange(f.value)}
-              className={`industrial-btn text-xs px-3 py-1.5 ${
-                frequency === f.value ? "border-accent text-accent" : ""
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+        <form onSubmit={handleRateSubmit} className="flex items-center gap-2">
+          <input
+            type="number"
+            min="1"
+            value={rateInput}
+            onChange={(e) => setRateInput(e.target.value)}
+            className="bg-tertiary border border-edge text-bright px-3 py-1.5 rounded w-24 text-xs font-mono"
+          />
+          <span className="text-dim text-xs">条/分钟</span>
+          <button
+            type="submit"
+            className="industrial-btn text-xs px-3 py-1.5 hover:border-accent"
+          >
+            应用
+          </button>
+        </form>
       </div>
 
       {/* 控制按钮 */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 mb-4">
         <button
           onClick={onStart}
           disabled={isRunning || isCompleted}
@@ -91,7 +95,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
       </div>
 
       {/* 跳转 */}
-      <div className="mt-4">
+      <div>
         <label className="text-xs text-dim mb-2 block">跳转到索引</label>
         <form onSubmit={handleJumpSubmit} className="flex items-center gap-2">
           <input
