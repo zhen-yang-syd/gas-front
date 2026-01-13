@@ -50,6 +50,9 @@ const LINK_COLORS = {
   "T-FS": "#F59E0B",  // 橙色
 };
 
+// 显示连线的最小相关系数阈值（只显示显著相关的连接）
+const MIN_CORRELATION_THRESHOLD = 0.3;
+
 // 根据r值获取连线样式
 function getLinkStyle(r: number, hasData: boolean) {
   if (!hasData) {
@@ -156,7 +159,7 @@ export function UnifiedCorrelationGraph({
     return map;
   }, [tNodes, wdNodes, fsNodes]);
 
-  // 生成 T-WD 连线
+  // 生成 T-WD 连线（只显示显著相关的连接 |r| >= 0.3）
   const tWdLinks = useMemo(() => {
     const links: any[] = [];
 
@@ -169,6 +172,11 @@ export function UnifiedCorrelationGraph({
         const key = `${t}-${wd}`;
         const corr = tWdMap.get(key);
         const hasData = !!corr;
+        const absR = Math.abs(corr?.r_value || 0);
+
+        // 只显示显著相关的连接（|r| >= 0.3）
+        if (!hasData || absR < MIN_CORRELATION_THRESHOLD) return;
+
         const style = getLinkStyle(corr?.r_value || 0, hasData);
 
         links.push({
@@ -186,11 +194,11 @@ export function UnifiedCorrelationGraph({
       });
     });
 
-    // 排序：有数据的在上面
-    return links.sort((a, b) => (b.hasData ? 1 : 0) - (a.hasData ? 1 : 0));
+    // 按相关系数降序排序（强相关在上面）
+    return links.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
   }, [nodePositions, tWdMap]);
 
-  // 生成 T-FS 连线
+  // 生成 T-FS 连线（只显示显著相关的连接 |r| >= 0.3）
   const tFsLinks = useMemo(() => {
     const links: any[] = [];
 
@@ -203,6 +211,11 @@ export function UnifiedCorrelationGraph({
         const key = `${t}-${fs}`;
         const corr = tFsMap.get(key);
         const hasData = !!corr;
+        const absR = Math.abs(corr?.r_value || 0);
+
+        // 只显示显著相关的连接（|r| >= 0.3）
+        if (!hasData || absR < MIN_CORRELATION_THRESHOLD) return;
+
         const style = getLinkStyle(corr?.r_value || 0, hasData);
 
         links.push({
@@ -220,14 +233,14 @@ export function UnifiedCorrelationGraph({
       });
     });
 
-    return links.sort((a, b) => (b.hasData ? 1 : 0) - (a.hasData ? 1 : 0));
+    // 按相关系数降序排序（强相关在上面）
+    return links.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
   }, [nodePositions, tFsMap]);
 
-  // 生成 T-T 连线（弧线，因为在同一列）
+  // 生成 T-T 连线（弧线，因为在同一列，只显示显著相关的连接 |r| >= 0.3）
   const tTLinks = useMemo(() => {
     const links: any[] = [];
 
-    // 只显示有数据的 T-T 连线（避免过于密集）
     for (let i = 0; i < T_SENSORS.length; i++) {
       for (let j = i + 1; j < T_SENSORS.length; j++) {
         const t1 = T_SENSORS[i];
@@ -239,9 +252,10 @@ export function UnifiedCorrelationGraph({
         const key = `${t1}-${t2}`;
         const corr = tTMap.get(key);
         const hasData = !!corr;
+        const absR = Math.abs(corr?.r_value || 0);
 
-        // 只保留有数据的连线
-        if (!hasData) continue;
+        // 只显示显著相关的连接（|r| >= 0.3）
+        if (!hasData || absR < MIN_CORRELATION_THRESHOLD) continue;
 
         const style = getLinkStyle(corr?.r_value || 0, hasData);
 
@@ -269,13 +283,11 @@ export function UnifiedCorrelationGraph({
     return links;
   }, [nodePositions, tTMap]);
 
-  // 统计
+  // 统计（只显示显著相关的连接数量）
   const stats = useMemo(() => ({
-    tTActive: tTLinks.length,  // T-T 只统计有数据的
-    tWdActive: tWdLinks.filter((l) => l.hasData).length,
-    tWdTotal: tWdLinks.length,
-    tFsActive: tFsLinks.filter((l) => l.hasData).length,
-    tFsTotal: tFsLinks.length,
+    tTActive: tTLinks.length,
+    tWdActive: tWdLinks.length,
+    tFsActive: tFsLinks.length,
   }), [tTLinks, tWdLinks, tFsLinks]);
 
   // 获取当前hover的连线信息
@@ -362,43 +374,9 @@ export function UnifiedCorrelationGraph({
             ))}
           </g>
 
-          {/* T-WD 连线 - 先画无数据的 */}
+          {/* T-WD 连线（只显示显著相关的连接） */}
           <g className="t-wd-links">
-            {tWdLinks.filter((l) => !l.hasData).map((link) => (
-              <line
-                key={link.id}
-                x1={link.x1}
-                y1={link.y1}
-                x2={link.x2}
-                y2={link.y2}
-                stroke={LINK_COLORS["T-WD"]}
-                strokeWidth={link.width}
-                strokeOpacity={link.opacity}
-                strokeDasharray={link.dash}
-              />
-            ))}
-          </g>
-
-          {/* T-FS 连线 - 先画无数据的 */}
-          <g className="t-fs-links">
-            {tFsLinks.filter((l) => !l.hasData).map((link) => (
-              <line
-                key={link.id}
-                x1={link.x1}
-                y1={link.y1}
-                x2={link.x2}
-                y2={link.y2}
-                stroke={LINK_COLORS["T-FS"]}
-                strokeWidth={link.width}
-                strokeOpacity={link.opacity}
-                strokeDasharray={link.dash}
-              />
-            ))}
-          </g>
-
-          {/* T-WD 有数据的连线 */}
-          <g className="t-wd-active-links">
-            {tWdLinks.filter((l) => l.hasData).map((link) => (
+            {tWdLinks.map((link) => (
               <g key={link.id}>
                 <line
                   x1={link.x1}
@@ -436,9 +414,9 @@ export function UnifiedCorrelationGraph({
             ))}
           </g>
 
-          {/* T-FS 有数据的连线 */}
-          <g className="t-fs-active-links">
-            {tFsLinks.filter((l) => l.hasData).map((link) => (
+          {/* T-FS 连线（只显示显著相关的连接） */}
+          <g className="t-fs-links">
+            {tFsLinks.map((link) => (
               <g key={link.id}>
                 <line
                   x1={link.x1}
@@ -585,18 +563,14 @@ export function UnifiedCorrelationGraph({
       <div className="flex justify-center gap-4 mt-2 text-xs text-slate-400">
         <span className="flex items-center gap-1">
           <span className="w-4 h-0.5 bg-current" style={{ opacity: 1 }} />
-          强 (r≥0.7)
+          强 (|r|≥0.7)
         </span>
         <span className="flex items-center gap-1">
           <span className="w-4 h-0.5 bg-current" style={{ opacity: 0.5 }} />
-          中 (0.3-0.7)
+          中 (0.3≤|r|&lt;0.7)
         </span>
-        <span className="flex items-center gap-1">
-          <span
-            className="w-4 h-0.5 bg-current"
-            style={{ opacity: 0.2, background: "repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 4px)" }}
-          />
-          无数据
+        <span className="text-slate-500 ml-2">
+          (仅显示显著相关 |r|≥0.3)
         </span>
       </div>
     </div>

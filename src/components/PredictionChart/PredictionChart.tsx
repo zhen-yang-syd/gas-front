@@ -89,7 +89,7 @@ export function PredictionChart({
       animationDuration: 300,
       title: {
         text: getSensorLabel(sensorId),
-        subtext: currentValue !== null ? `${currentValue.toFixed(3)}%` : "",
+        subtext: currentValue !== null ? `${currentValue.toFixed(3)}` : "",
         left: 8,
         top: 5,
         textStyle: {
@@ -98,7 +98,7 @@ export function PredictionChart({
           fontWeight: "bold",
         },
         subtextStyle: {
-          fontSize: 11,
+          fontSize: 12,
           color: "#06B6D4",
           fontWeight: "bold",
         },
@@ -120,7 +120,7 @@ export function PredictionChart({
             if (p.value === null || p.value === undefined) return "";
             const type = p.seriesName === "实时" ? "实时" : "预测";
             const color = type === "实时" ? "#06B6D4" : trendColors[trend];
-            return `<span style="color:${color}">●</span> ${type}: <b>${p.value.toFixed(4)}%</b>`;
+            return `<span style="color:${color}">●</span> ${type}: <b>${p.value.toFixed(4)}</b>`;
           });
           return `<div style="font-family:monospace">${paramsArray[0]?.axisValue || ""}<br/>${lines.filter(Boolean).join("<br/>")}</div>`;
         },
@@ -153,7 +153,7 @@ export function PredictionChart({
         axisLabel: {
           fontSize: 10,
           color: "#64748B",
-          formatter: (v: number) => v.toFixed(2) + "%",
+          formatter: (v: number) => v.toFixed(2),
         },
         splitLine: {
           lineStyle: { color: "#334155", type: "dashed", opacity: 0.5 },
@@ -196,7 +196,7 @@ export function PredictionChart({
                 label: {
                   show: true,
                   position: "insideEndTop",
-                  formatter: `峰值: ${peakValue.toFixed(3)}%`,
+                  formatter: `峰值: ${peakValue.toFixed(3)}`,
                   color: "#F87171",
                   fontSize: 10,
                   backgroundColor: "rgba(30, 41, 59, 0.8)",
@@ -233,21 +233,34 @@ export function PredictionChart({
             },
           },
         },
+        // 当前时间分割线（白色长竖线，贯穿Y轴）
+        {
+          name: "分割线",
+          type: "line",
+          data: [],
+          markLine: historyLen > 0 ? {
+            silent: true,
+            symbol: "none",
+            data: [
+              {
+                xAxis: historyLen - 1,
+                lineStyle: { color: "#FFFFFF", type: "solid", width: 2, opacity: 0.8 },
+                label: {
+                  show: true,
+                  position: "insideEndTop",
+                  formatter: "现在",
+                  color: "#FFFFFF",
+                  fontSize: 10,
+                  fontWeight: "bold",
+                  backgroundColor: "rgba(30, 41, 59, 0.9)",
+                  padding: [2, 6],
+                  borderRadius: 3,
+                },
+              },
+            ],
+          } : undefined,
+        },
       ],
-      // 当前时间标记线
-      markLine: historyLen > 0 ? {
-        silent: true,
-        symbol: "none",
-        data: [
-          {
-            xAxis: historyLen - 1,
-            lineStyle: { color: "#94A3B8", type: "solid", width: 1.5 },
-            label: {
-              show: false,
-            },
-          },
-        ],
-      } : undefined,
     };
   }, [sensorId, history, prediction, trend]);
 

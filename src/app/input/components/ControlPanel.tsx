@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 interface ControlPanelProps {
   ratePerMinute: number;
@@ -25,8 +25,15 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   isCompleted,
   totalRows,
 }) => {
-  const [rateInput, setRateInput] = useState(ratePerMinute.toString());
+  const [rateInput, setRateInput] = useState((ratePerMinute ?? 60).toString());
   const [jumpInput, setJumpInput] = useState("");
+
+  // 当 ratePerMinute 从 API 更新时，同步输入框
+  useEffect(() => {
+    if (ratePerMinute !== undefined) {
+      setRateInput(ratePerMinute.toString());
+    }
+  }, [ratePerMinute]);
 
   const handleRateSubmit = (e: React.FormEvent) => {
     e.preventDefault();

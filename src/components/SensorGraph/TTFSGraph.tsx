@@ -54,6 +54,9 @@ const LINK_COLORS = {
   "T-FS": "#1e3a5f",  // 深蓝
 };
 
+// 显示连线的最小相关系数阈值（只显示显著相关的连接）
+const MIN_CORRELATION_THRESHOLD = 0.3;
+
 function getLinkStyle(r: number, hasData: boolean) {
   if (!hasData) {
     return { width: 0.5, opacity: 0.1, dash: "2,4", animated: false };
@@ -148,7 +151,7 @@ export function TTFSGraph({
     return map;
   }, [t1Nodes, t2Nodes, fsNodes]);
 
-  // T-FS 连线：仅从列2的T连接到列3的FS
+  // T-FS 连线：仅从列2的T连接到列3的FS（只显示显著相关 |r| >= 0.3）
   const tFsLinks = useMemo(() => {
     const links: LinkData[] = [];
     T_COL2.forEach((t) => {
@@ -159,7 +162,7 @@ export function TTFSGraph({
 
         const key = `${t}-${fs}`;
         const corr = tFsMap.get(key);
-        if (!corr) return;
+        if (!corr || Math.abs(corr.r_value) < MIN_CORRELATION_THRESHOLD) return;
 
         const style = getLinkStyle(corr.r_value, true);
 
@@ -178,7 +181,7 @@ export function TTFSGraph({
     return links;
   }, [nodePositions, tFsMap]);
 
-  // T-T 连线：仅从列1的T连接到列2的T（跨列直线，无同列内连线）
+  // T-T 连线：仅从列1的T连接到列2的T（只显示显著相关 |r| >= 0.3）
   const tTLinks = useMemo(() => {
     const links: LinkData[] = [];
 
@@ -194,7 +197,7 @@ export function TTFSGraph({
 
         const key = `${t1}-${t2}`;
         const corr = tTMap.get(key);
-        if (!corr) return;
+        if (!corr || Math.abs(corr.r_value) < MIN_CORRELATION_THRESHOLD) return;
 
         const style = getLinkStyle(corr.r_value, true);
 

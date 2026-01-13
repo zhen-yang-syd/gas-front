@@ -13,13 +13,17 @@ interface SystemStatusPanelProps {
 
 export const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({
   state,
-  currentIndex,
-  totalRows,
-  runtime,
+  currentIndex = 0,
+  totalRows = 0,
+  runtime = 0,
 }) => {
+  // 安全获取数值，防止 undefined
+  const safeCurrentIndex = currentIndex ?? 0;
+  const safeTotalRows = totalRows ?? 0;
+
   // 计算进度，确保不超过100%
   const progress =
-    totalRows > 0 ? Math.min((currentIndex / totalRows) * 100, 100) : 0;
+    safeTotalRows > 0 ? Math.min((safeCurrentIndex / safeTotalRows) * 100, 100) : 0;
 
   const stateText = {
     stopped: "已停止",
@@ -60,8 +64,8 @@ export const SystemStatusPanel: React.FC<SystemStatusPanelProps> = ({
         <div>
           <div className="text-xs text-dim mb-1">当前索引</div>
           <div className="font-mono text-lg text-bright">
-            {currentIndex.toLocaleString()}
-            <span className="text-dim text-sm"> / {totalRows.toLocaleString()}</span>
+            {safeCurrentIndex.toLocaleString()}
+            <span className="text-dim text-sm"> / {safeTotalRows.toLocaleString()}</span>
           </div>
         </div>
 

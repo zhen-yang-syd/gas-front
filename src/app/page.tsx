@@ -86,10 +86,20 @@ interface PredictionData {
   confidence: number;
 }
 
+interface FlylinePair {
+  sensor1: string;
+  sensor2: string;
+  cav: number;
+  status: string;
+  color: string;
+  type: string;
+}
+
 export default function Home() {
   const [apiStatus, setApiStatus] = useState<"loading" | "connected" | "error">("loading");
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [bubbleWall, setBubbleWall] = useState<BubbleWallData | null>(null);
+  const [flylinePairs, setFlylinePairs] = useState<FlylinePair[]>([]);
   const [demoMode, setDemoMode] = useState<"idle" | "preparing" | "running">("idle");
   // 持久化相关性缓存 - 使用 Map 累积，连线建立后保留
   const [persistentCorrelations, setPersistentCorrelations] = useState<{
@@ -196,10 +206,11 @@ export default function Home() {
 
         const data = await analysisApi.getPrediction(sensor);
         if (data && !data.error) {
+          // 预测数据通常是12个点，历史也取12个点，实现50:50比例
+          const predLen = data.prediction?.length || 12;
           results.push({
             sensor_id: data.sensor_id,
-            // 使用本地累积的实时历史（如果有足够数据），显示30个点让预测占比更大
-            history: localHistory.length >= 30 ? localHistory.slice(-30) : (data.history?.slice(-30) || []),
+            history: localHistory.length >= predLen ? localHistory.slice(-predLen) : (data.history?.slice(-predLen) || []),
             prediction: data.prediction || [],
             trend: data.trend || "stable",
             confidence: data.confidence || 0.5,
@@ -208,7 +219,7 @@ export default function Home() {
           // 即使API失败，也显示本地历史数据
           results.push({
             sensor_id: sensor,
-            history: localHistory.slice(-30),
+            history: localHistory.slice(-12),
             prediction: [],
             trend: "stable",
             confidence: 0.5,
@@ -221,7 +232,7 @@ export default function Home() {
         if (localHistory.length >= 10) {
           results.push({
             sensor_id: sensor,
-            history: localHistory.slice(-30),
+            history: localHistory.slice(-12),
             prediction: [],
             trend: "stable",
             confidence: 0.5,
@@ -280,11 +291,16 @@ export default function Home() {
             sseEventCount: prev.sseEventCount + 1,
           }));
 
-          // 气泡墙数据：直接替换（后端已确保稳定的30对数据）
-          // 关键设计：后端使用预定义的固定传感器对列表，每次推送都包含完整的30对
+          // 气泡墙数据：直接替换（后端已确保稳定的756对数据）
+          // 关键设计：后端使用预定义的固定传感器对列表，每次推送都包含完整的756对
           // 因此前端无需合并逻辑，直接替换即可
           if (data.bubble_wall?.bubbles) {
             setBubbleWall(data.bubble_wall);
+          }
+
+          // 飞线数据：后端已过滤显著相关的传感器对（top 50，|r| >= 0.3）
+          if (data.flyline_pairs) {
+            setFlylinePairs(data.flyline_pairs);
           }
 
           // 合并新相关性到持久化缓存（累积而非覆盖）
@@ -417,16 +433,9 @@ export default function Home() {
     [sensorData]
   );
 
-  // 显示所有气泡的连线（不限于异常状态）
-  const alertPairs = useMemo(() => {
-    if (!bubbleWall?.bubbles) return [];
-    return bubbleWall.bubbles.map((b) => ({
-      sensor1: b.sensor_pair[0],
-      sensor2: b.sensor_pair[1],
-      cav: b.cav,
-      status: b.status,
-    }));
-  }, [bubbleWall]);
+  // 飞线数据：使用后端过滤的显著相关传感器对（top 50，|r| >= 0.3）
+  // 后端已按相关系数降序排序，前端直接使用
+  const alertPairs = flylinePairs;
 
   return (
     <div className="min-h-screen bg-base">

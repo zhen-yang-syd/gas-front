@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { formatSensorPairLabel } from "@/lib/sensors";
 
 interface BubbleWallChartProps {
@@ -10,6 +11,8 @@ interface BubbleWallChartProps {
   llv: number;
   isPairDynamic: boolean;
   pairHistoryCount: number;
+  changeMagnitude?: number; // 波动幅度
+  hasData?: boolean;        // 是否有有效数据
   status: string;
   color: string;
   sensorType?: string;      // T-T, T-WD, T-FS
@@ -91,6 +94,18 @@ export function BubbleWallChart({
 
   // Hover 状态
   const [isHovered, setIsHovered] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState<{
+    x: number;
+    y: number;
+    below: boolean;
+  } | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // 客户端挂载检测（Portal 需要）
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // 计算 CAV 相对于阈值的位置描述
   const cavPosition = useMemo(() => {
@@ -101,15 +116,44 @@ export function BubbleWallChart({
     return `正常范围内 ${posInRange.toFixed(0)}%`;
   }, [cav, ulv, llv]);
 
+  // 检测卡片位置，计算 tooltip 绝对位置
+  const handleMouseEnter = () => {
+    if (cardRef.current) {
+      const rect = cardRef.current.getBoundingClientRect();
+      const below = rect.top < 180; // 如果卡片靠近顶部，tooltip 显示在下方
+      setTooltipPos({
+        x: rect.left + rect.width / 2,
+        y: below ? rect.bottom + 8 : rect.top - 8,
+        below,
+      });
+    }
+    setIsHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+    setTooltipPos(null);
+  };
+
   return (
     <div
+      ref={cardRef}
       className="relative"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
-      {/* Hover Tooltip */}
-      {isHovered && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg shadow-lg text-xs whitespace-nowrap">
+      {/* Hover Tooltip - 使用 Portal 渲染到 body，避免被容器 overflow 裁剪 */}
+      {isHovered && isMounted && tooltipPos && createPortal(
+        <div
+          className="fixed z-[9999] px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg shadow-xl text-xs whitespace-nowrap pointer-events-none"
+          style={{
+            left: tooltipPos.x,
+            top: tooltipPos.y,
+            transform: tooltipPos.below
+              ? "translateX(-50%)"
+              : "translateX(-50%) translateY(-100%)",
+          }}
+        >
           <div className="font-bold text-slate-200 mb-1">{shortLabel}</div>
           <div className="space-y-0.5 text-slate-400">
             <div>
@@ -138,9 +182,16 @@ export function BubbleWallChart({
               状态: <span style={{ color }}>{getStatusLabel(status)}</span>
             </div>
           </div>
-          {/* 箭头 */}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
-        </div>
+          {/* 箭头 - 根据位置调整方向 */}
+          <div
+            className={`absolute left-1/2 -translate-x-1/2 border-4 border-transparent ${
+              tooltipPos.below
+                ? "-top-2 border-b-slate-800"
+                : "-bottom-2 border-t-slate-800"
+            }`}
+          />
+        </div>,
+        document.body
       )}
 
       <svg

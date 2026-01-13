@@ -1,5 +1,6 @@
 // 数据行记录
 export interface RowRecord {
+  index?: number; // 数据索引
   timestamp: string; // 系统时间 YYYY/MM/DD_HH:mm:ss
   sensors: Record<string, number | null>; // 传感器名 -> 值
 }
