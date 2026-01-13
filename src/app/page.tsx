@@ -250,8 +250,7 @@ export default function Home() {
 
   // 初始数据获取
   // 注意：不调用 fetchBubbleWall()，气泡墙数据完全由 SSE 推送
-  // 原因：REST API /api/analysis/bubble-wall 只返回 T-T 类型，
-  //       而 SSE 推送 T-T + T-WD + T-FS 三种类型，两者会冲突
+  // 注意：不调用 fetchCorrelations()，相关性数据只在运行时获取
   useEffect(() => {
     if (apiStatus !== "connected") return;
 
@@ -259,11 +258,11 @@ export default function Home() {
       await Promise.all([
         fetchStatus(),
         // fetchBubbleWall() 移除 - 由 SSE 推送
-        fetchCorrelations(),
+        // fetchCorrelations() 移除 - 只在运行时获取，初始为空
         fetchPredictions(),
       ]);
     })();
-  }, [apiStatus, fetchStatus, fetchCorrelations, fetchPredictions]);
+  }, [apiStatus, fetchStatus, fetchPredictions]);
 
   // SSE 实时数据流
   useEffect(() => {
@@ -376,7 +375,7 @@ export default function Home() {
 
     const statusInterval = setInterval(() => void fetchStatus(), 2000);
     const predictionInterval = setInterval(() => void fetchPredictions(), 30000); // 30秒更新预测
-    const correlationInterval = setInterval(() => void fetchCorrelations(), 15000);
+    // 相关性数据只在运行时获取（由单独的 useEffect 控制）
 
     // 移除 fallbackInterval - 气泡墙完全由 SSE 推送
     // REST API 只返回 T-T，会覆盖 SSE 推送的 T-T + T-WD + T-FS 数据
@@ -386,9 +385,21 @@ export default function Home() {
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       clearInterval(statusInterval);
       clearInterval(predictionInterval);
-      clearInterval(correlationInterval);
     };
-  }, [apiStatus, fetchStatus, fetchCorrelations, fetchPredictions]);
+  }, [apiStatus, fetchStatus, fetchPredictions]);
+
+  // 相关性数据只在运行时获取
+  useEffect(() => {
+    if (!systemStatus?.is_running) return;
+
+    // 开始运行时立即获取一次
+    fetchCorrelations();
+
+    // 然后每15秒更新
+    const correlationInterval = setInterval(() => void fetchCorrelations(), 15000);
+
+    return () => clearInterval(correlationInterval);
+  }, [systemStatus?.is_running, fetchCorrelations]);
 
   // 控制按钮处理
   const handleStart = async () => {
@@ -403,6 +414,15 @@ export default function Home() {
 
   const handleReset = async () => {
     await controlApi.reset();
+    // 清空相关性缓存
+    setPersistentCorrelations({
+      "T-T": new Map(),
+      "T-WD": new Map(),
+      "T-FS": new Map(),
+    });
+    // 清空气泡墙数据
+    setBubbleWall(null);
+    setFlylinePairs([]);
     fetchStatus();
   };
 
@@ -417,7 +437,7 @@ export default function Home() {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/control/seek/500`, { method: "PUT" });
       await fetchStatus();
       // fetchBubbleWall() 移除 - 气泡墙由 SSE 推送
-      await fetchCorrelations();
+      // fetchCorrelations() 移除 - 由 useEffect 在运行时自动获取
       await fetchPredictions();
       setDemoMode("running");
     } catch (e) {

@@ -33,16 +33,3 @@ export interface SensorStatus {
 
 // 应用状态
 export type AppState = "stopped" | "running" | "completed";
-
-// CSV文件数据
-export interface CSVData {
-  headers: string[]; // 传感器列名（不含时间列）
-  rows: Array<Record<string, string | null>>; // 每行的传感器数据
-}
-
-// 解析后的所有CSV数据
-export interface ParsedData {
-  files: CSVData[];
-  allSensorNames: string[]; // 所有CSV中出现的传感器名（去重）
-  totalRows: number; // 总行数
-}

@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BubbleWallChart } from "./BubbleWallChart";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface BubbleData {
   label: string;
@@ -44,6 +46,10 @@ interface BubbleWallGridProps {
 // 类型过滤选项
 type TypeFilter = "all" | "T-T" | "T-WD" | "T-FS";
 
+// 固定阈值（文献定义）
+const FIXED_ULV = 0.7;
+const FIXED_LLV = 0.4;
+
 /**
  * 气泡墙图网格组件
  *
@@ -59,6 +65,55 @@ export function BubbleWallGrid({
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [showOnlyWithData, setShowOnlyWithData] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // 气泡墙设置开关
+  const [useDynamicThreshold, setUseDynamicThreshold] = useState(true);  // 动态阈值开关
+  const [enableAutoSort, setEnableAutoSort] = useState(false);  // 自动排序开关（默认关闭）
+
+  // 初始化时从后端获取设置
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/control/bubble-wall/settings`);
+        if (res.ok) {
+          const data = await res.json();
+          setUseDynamicThreshold(data.dynamic_threshold);
+          setEnableAutoSort(data.sort_by_volatility);
+        }
+      } catch (e) {
+        console.warn("Failed to fetch bubble wall settings:", e);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  // 更新后端设置
+  const updateSettings = useCallback(async (dynamicThreshold: boolean, sortEnabled: boolean) => {
+    try {
+      await fetch(`${API_BASE}/api/control/bubble-wall/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dynamic_threshold: dynamicThreshold,
+          sort_by_volatility: sortEnabled,
+        }),
+      });
+    } catch (e) {
+      console.warn("Failed to update bubble wall settings:", e);
+    }
+  }, []);
+
+  // 切换动态阈值开关
+  const handleThresholdToggle = useCallback((enabled: boolean) => {
+    setUseDynamicThreshold(enabled);
+    updateSettings(enabled, enableAutoSort);
+  }, [enableAutoSort, updateSettings]);
+
+  // 切换自动排序开关
+  const handleSortToggle = useCallback((enabled: boolean) => {
+    setEnableAutoSort(enabled);
+    updateSettings(useDynamicThreshold, enabled);
+  }, [useDynamicThreshold, updateSettings]);
 
   // 类型颜色
   const typeColors: Record<string, string> = {
@@ -177,6 +232,62 @@ export function BubbleWallGrid({
         </label>
       </div>
 
+      {/* 气泡墙设置开关 */}
+      <div className="flex items-center justify-between text-xs flex-wrap gap-2 px-2 py-1.5 bg-slate-800/50 rounded">
+        <div className="flex items-center gap-4">
+          {/* 阈值模式开关 */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500">阈值:</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={useDynamicThreshold}
+              onClick={() => handleThresholdToggle(!useDynamicThreshold)}
+              className={`relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                useDynamicThreshold ? "bg-blue-600" : "bg-slate-600"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  useDynamicThreshold ? "translate-x-3" : "translate-x-0"
+                }`}
+              />
+            </button>
+            <span className={useDynamicThreshold ? "text-blue-400" : "text-slate-400"}>
+              {useDynamicThreshold ? "动态" : "固定"}
+            </span>
+            {!useDynamicThreshold && (
+              <span className="text-slate-500 font-mono text-[10px]">
+                (ULV={FIXED_ULV}, LLV={FIXED_LLV})
+              </span>
+            )}
+          </div>
+
+          {/* 自动排序开关 */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500">排序:</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={enableAutoSort}
+              onClick={() => handleSortToggle(!enableAutoSort)}
+              className={`relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                enableAutoSort ? "bg-green-600" : "bg-slate-600"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  enableAutoSort ? "translate-x-3" : "translate-x-0"
+                }`}
+              />
+            </button>
+            <span className={enableAutoSort ? "text-green-400" : "text-slate-400"}>
+              {enableAutoSort ? "按波动排序" : "固定顺序"}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* 高波动传感器对提示 */}
       {topVolatile.length > 0 && (
         <div className="px-3 py-2 bg-yellow-900/20 border border-yellow-700/30 rounded text-xs">
@@ -227,9 +338,9 @@ export function BubbleWallGrid({
                   <BubbleWallChart
                     label={bubble.label}
                     cav={bubble.cav}
-                    ulv={bubble.ulv}
-                    llv={bubble.llv}
-                    isPairDynamic={bubble.is_pair_dynamic}
+                    ulv={useDynamicThreshold ? bubble.ulv : FIXED_ULV}
+                    llv={useDynamicThreshold ? bubble.llv : FIXED_LLV}
+                    isPairDynamic={useDynamicThreshold && bubble.is_pair_dynamic}
                     pairHistoryCount={bubble.pair_history_count}
                     changeMagnitude={bubble.change_magnitude}
                     hasData={bubble.has_data}
@@ -253,16 +364,24 @@ export function BubbleWallGrid({
       <div className="pt-2 border-t border-slate-700 space-y-1">
         {/* 全局参考值显示 */}
         <div className="flex flex-wrap justify-center gap-3 text-xs text-slate-400">
-          <span className="text-slate-500">全局参考:</span>
-          <span className="font-mono">
-            ULV = <span className="text-yellow-400">{globalThresholds.ulv.toFixed(3)}</span>
-          </span>
-          <span className="font-mono">
-            LLV = <span className="text-blue-400">{globalThresholds.llv.toFixed(3)}</span>
-          </span>
           <span className="text-slate-500">
-            ({globalThresholds.total_history} 样本)
+            {useDynamicThreshold ? "动态阈值:" : "固定阈值:"}
           </span>
+          <span className="font-mono">
+            ULV = <span className="text-yellow-400">
+              {useDynamicThreshold ? globalThresholds.ulv.toFixed(3) : FIXED_ULV.toFixed(1)}
+            </span>
+          </span>
+          <span className="font-mono">
+            LLV = <span className="text-blue-400">
+              {useDynamicThreshold ? globalThresholds.llv.toFixed(3) : FIXED_LLV.toFixed(1)}
+            </span>
+          </span>
+          {useDynamicThreshold && (
+            <span className="text-slate-500">
+              ({globalThresholds.total_history} 样本)
+            </span>
+          )}
         </div>
       </div>
     </div>

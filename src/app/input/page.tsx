@@ -168,7 +168,9 @@ export default function InputPage() {
 
           // 处理传感器读数
           if (data.sensor_readings) {
-            const timestamp = data.timestamp || new Date().toISOString();
+            // 格式化时间戳：ISO 格式 -> YYYY/MM/DD_HH:mm:ss
+            const rawTimestamp = data.timestamp || new Date().toISOString();
+            const timestamp = formatSystemTime(new Date(rawTimestamp));
             const readings = data.sensor_readings as Record<string, number>;
 
             // 创建表格记录
