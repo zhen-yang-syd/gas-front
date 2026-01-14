@@ -182,14 +182,16 @@ export function TTFSGraph({
   }, [nodePositions, tFsMap]);
 
   // T-T 连线：仅从列1的T连接到列2的T（只显示显著相关 |r| >= 0.3）
+  // 关键：只保留 t1 < t2 的连线，避免 (T1→T2) 和 (T2→T1) 重复
   const tTLinks = useMemo(() => {
     const links: LinkData[] = [];
 
     // 遍历所有 T-T 相关性对，在列1和列2之间绘制
     T_COL1.forEach((t1) => {
       T_COL2.forEach((t2) => {
-        // 跳过同一个传感器（列1的T1和列2的T1不连）
-        if (t1 === t2) return;
+        // 跳过同一个传感器，以及反向的配对（避免重复）
+        // 只保留 t1 < t2 的情况：列1的T1 → 列2的T2
+        if (t1 >= t2) return;
 
         const pos1 = nodePositions.get(`T1:${t1}`);  // 列1
         const pos2 = nodePositions.get(`T2:${t2}`);  // 列2

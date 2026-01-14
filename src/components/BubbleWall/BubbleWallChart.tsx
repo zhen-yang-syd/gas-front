@@ -34,11 +34,18 @@ export function BubbleWallChart({
   llv,
   isPairDynamic,
   pairHistoryCount,
+  hasData = true,
   status,
   color,
   sensorType = "T-T",
   typeColor = "#06B6D4",
 }: BubbleWallChartProps) {
+  // 判断是否为 disabled 状态（无数据或 cav=0）
+  const isDisabled = hasData === false || cav === 0;
+
+  // disabled 状态使用灰色
+  const displayColor = isDisabled ? "#64748B" : color;
+
   // 计算气泡Y位置
   const bubbleY = useMemo(() => {
     const wallTop = 25;    // ULV线Y坐标
@@ -72,16 +79,17 @@ export function BubbleWallChart({
     return Math.min(92, wallBottom + deficit * 17);
   }, [cav, ulv, llv]);
 
-  // 计算气泡半径 (基于CAV值)
+  // 计算气泡半径 (基于CAV值，disabled状态使用固定小半径)
   const radius = useMemo(() => {
+    if (isDisabled) return 10; // disabled 状态固定半径
     const minR = 8;
     const maxR = 16;
     const normalized = Math.min(Math.max(cav, 0), 1);
     return minR + normalized * (maxR - minR);
-  }, [cav]);
+  }, [cav, isDisabled]);
 
-  // 判断是否需要脉冲动画 (异常或警告状态)
-  const shouldPulse = status.includes("ABNORMAL") || status.includes("WARNING");
+  // 判断是否需要脉冲动画 (异常或警告状态，disabled不动画)
+  const shouldPulse = !isDisabled && (status.includes("ABNORMAL") || status.includes("WARNING"));
 
   // 将传感器对标签转换为简称
   const shortLabel = useMemo(() => {
@@ -156,31 +164,42 @@ export function BubbleWallChart({
         >
           <div className="font-bold text-slate-200 mb-1">{shortLabel}</div>
           <div className="space-y-0.5 text-slate-400">
-            <div>
-              CAV: <span className="text-white font-mono">{cav.toFixed(4)}</span>
-            </div>
-            <div className="pt-1 border-t border-slate-700 mt-1">
-              <span className={isPairDynamic ? "text-green-400" : "text-slate-500"}>
-                该对阈值 ({isPairDynamic ? "动态" : "默认"}):
-              </span>
-            </div>
-            <div>
-              ULV: <span className="text-yellow-400 font-mono">{ulv.toFixed(4)}</span>
-              {" "}(P75)
-            </div>
-            <div>
-              LLV: <span className="text-blue-400 font-mono">{llv.toFixed(4)}</span>
-              {" "}(P25)
-            </div>
-            <div>
-              历史样本: <span className="text-slate-300 font-mono">{pairHistoryCount}</span>
-            </div>
-            <div className="pt-1 border-t border-slate-700 mt-1">
-              位置: <span className="text-slate-300">{cavPosition}</span>
-            </div>
-            <div>
-              状态: <span style={{ color }}>{getStatusLabel(status)}</span>
-            </div>
+            {isDisabled ? (
+              <>
+                <div className="text-slate-500">暂无相关性数据</div>
+                <div className="text-slate-600 text-[10px] pt-1">
+                  该传感器对尚未积累足够的数据进行相关性分析
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  CAV: <span className="text-white font-mono">{cav.toFixed(4)}</span>
+                </div>
+                <div className="pt-1 border-t border-slate-700 mt-1">
+                  <span className={isPairDynamic ? "text-green-400" : "text-slate-500"}>
+                    该对阈值 ({isPairDynamic ? "动态" : "默认"}):
+                  </span>
+                </div>
+                <div>
+                  ULV: <span className="text-yellow-400 font-mono">{ulv.toFixed(4)}</span>
+                  {" "}(P75)
+                </div>
+                <div>
+                  LLV: <span className="text-blue-400 font-mono">{llv.toFixed(4)}</span>
+                  {" "}(P25)
+                </div>
+                <div>
+                  历史样本: <span className="text-slate-300 font-mono">{pairHistoryCount}</span>
+                </div>
+                <div className="pt-1 border-t border-slate-700 mt-1">
+                  位置: <span className="text-slate-300">{cavPosition}</span>
+                </div>
+                <div>
+                  状态: <span style={{ color }}>{getStatusLabel(status)}</span>
+                </div>
+              </>
+            )}
           </div>
           {/* 箭头 - 根据位置调整方向 */}
           <div
@@ -200,6 +219,7 @@ export function BubbleWallChart({
         viewBox="0 0 120 120"
         className={`overflow-visible cursor-pointer transition-transform ${isHovered ? "scale-105" : ""}`}
         preserveAspectRatio="xMidYMid meet"
+        style={{ opacity: isDisabled ? 0.5 : 1 }}
       >
       {/* 背景 */}
       <rect
@@ -218,7 +238,7 @@ export function BubbleWallChart({
         y="5"
         width="100"
         height="3"
-        fill={typeColor}
+        fill={isDisabled ? "#475569" : typeColor}
         rx="1.5"
         opacity="0.8"
       />
@@ -226,7 +246,7 @@ export function BubbleWallChart({
         x="12"
         y="18"
         fontSize="7"
-        fill={typeColor}
+        fill={isDisabled ? "#64748B" : typeColor}
         fontWeight="bold"
       >
         {sensorType}
@@ -298,8 +318,8 @@ export function BubbleWallChart({
         cx="60"
         cy={bubbleY}
         r={radius}
-        fill={color}
-        filter={`url(#glow-${label.replace(/[^a-zA-Z0-9]/g, "")})`}
+        fill={displayColor}
+        filter={isDisabled ? undefined : `url(#glow-${label.replace(/[^a-zA-Z0-9]/g, "")})`}
         opacity="0.9"
         style={{
           transition: "cy 0.5s ease-out, r 0.3s ease-out, fill 0.3s ease-out",
@@ -316,7 +336,7 @@ export function BubbleWallChart({
         )}
       </circle>
 
-      {/* CAV值显示在气泡中 */}
+      {/* CAV值显示在气泡中（disabled显示"-"） */}
       <text
         x="60"
         y={bubbleY + 4}
@@ -325,7 +345,7 @@ export function BubbleWallChart({
         textAnchor="middle"
         fontWeight="bold"
       >
-        {cav.toFixed(2)}
+        {isDisabled ? "-" : cav.toFixed(2)}
       </text>
 
       {/* 传感器对标签 - 使用简称 */}
@@ -345,10 +365,10 @@ export function BubbleWallChart({
         x="60"
         y="112"
         fontSize="7"
-        fill={color}
+        fill={displayColor}
         textAnchor="middle"
       >
-        {getStatusLabel(status)}
+        {isDisabled ? "暂无数据" : getStatusLabel(status)}
       </text>
     </svg>
     </div>

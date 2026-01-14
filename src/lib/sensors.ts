@@ -54,19 +54,16 @@ export const WD_SENSOR_MAP: Record<string, string> = {
 };
 
 // ============================================
-// FS传感器 (风速) - 10个
+// FS传感器 (风速) - 7个 (与 Merged_Data of Gas and FS.csv 匹配)
 // ============================================
 export const FS_SENSOR_MAP: Record<string, string> = {
-  FS010101: "FS1",   // Three mining Total wind-back alley FS
-  FS010102: "FS2",   // Three mining auxiliary wind-back alley FS
-  FS010103: "FS3",   // Three mining East Wing wind-back alley FS
-  FS010104: "FS4",   // Three mining trackway middle FS
-  FS010105: "FS5",   // Three mining West Wing Orbital Lane Belt Lane Duplex Lane FS
-  FS010201: "FS6",   // Four mining water bin air vent FS
-  FS010202: "FS7",   // Four mining water bin wind-back alley FS
-  FS010301: "FS8",   // Four mining trackway air vent FS
-  FS010302: "FS9",   // Four mining trackway wind-back alley FS
-  FS010401: "FS10",  // Four mining North Wing wind-back alley FS
+  FS010103: "FS1",   // Three mining East Wing wind-back alley FS
+  FS010104: "FS2",   // Three mining trackway middle FS
+  FS010105: "FS3",   // Three mining West Wing Orbital Lane Belt Lane Duplex Lane FS
+  FS010201: "FS4",   // Four mining water bin air vent FS
+  FS010202: "FS5",   // Four mining water bin wind-back alley FS
+  FS010301: "FS6",   // Four mining trackway air vent FS
+  FS010302: "FS7",   // Four mining trackway wind-back alley FS
 };
 
 // ============================================
@@ -141,6 +138,6 @@ export function formatSensorPairLabel(sensor1: string, sensor2: string): string 
 export const SENSOR_COUNTS = {
   T: T_SENSORS.length,   // 21
   WD: WD_SENSORS.length, // 16
-  FS: FS_SENSORS.length, // 10
-  total: ALL_SENSORS.length, // 47
+  FS: FS_SENSORS.length, // 7
+  total: ALL_SENSORS.length, // 44
 };

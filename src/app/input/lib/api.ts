@@ -93,4 +93,23 @@ export const controlApi = {
     const res = await fetch(`${API_BASE}/api/control/status`);
     return res.json();
   },
+
+  /**
+   * 获取历史数据记录（用于页面切换时填充表格）
+   */
+  getHistory: async (
+    limit: number = 200
+  ): Promise<{
+    records: Array<{
+      index: number;
+      timestamp: string;
+      sensors: Record<string, number | null>;
+    }>;
+    count: number;
+    start_index: number;
+    current_index: number;
+  }> => {
+    const res = await fetch(`${API_BASE}/api/control/history?limit=${limit}`);
+    return res.json();
+  },
 };

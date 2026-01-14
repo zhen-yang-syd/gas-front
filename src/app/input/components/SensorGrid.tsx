@@ -13,6 +13,11 @@ export const SensorGrid: React.FC<SensorGridProps> = ({ sensors }) => {
   const tSensors = sensors.filter((s) => s.name.startsWith("T"));
   const wdSensors = sensors.filter((s) => s.name.startsWith("WD"));
   const fsSensors = sensors.filter((s) => s.name.startsWith("FS"));
+  const wySensors = sensors.filter((s) => s.name.startsWith("WY"));
+  const ylSensors = sensors.filter((s) => s.name.startsWith("YL"));
+  const coSensors = sensors.filter((s) => s.name.startsWith("CO"));
+  const sySensors = sensors.filter((s) => s.name.startsWith("SY"));
+  const llSensors = sensors.filter((s) => s.name.startsWith("LL"));
 
   const getStatusClass = (status: SensorStatus["status"]) => {
     switch (status) {
@@ -33,44 +38,47 @@ export const SensorGrid: React.FC<SensorGridProps> = ({ sensors }) => {
     groupSensors: SensorStatus[],
     colorClass: string
   ) => {
-    if (groupSensors.length === 0) return null;
-
+    // 始终渲染分组容器，避免布局抖动
     return (
-      <div className="space-y-2">
+      <div className="space-y-2 min-h-[80px]">
         <h3 className={`text-sm font-light ${colorClass} mb-2`}>{title}</h3>
-        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
-          {groupSensors.map((sensor) => {
-            const valueText =
-              sensor.value !== null ? formatValue(sensor.value) : "无数据";
-            const statusText = getStatusText(sensor.status);
+        {groupSensors.length === 0 ? (
+          <div className="text-xs text-dim py-4 text-center">暂无数据</div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {groupSensors.map((sensor) => {
+              const valueText =
+                sensor.value !== null ? formatValue(sensor.value) : "无数据";
+              const statusText = getStatusText(sensor.status);
 
-            return (
-              <div
-                key={sensor.name}
-                className={`${getStatusClass(sensor.status)} border rounded p-2 text-center cursor-pointer transition-transform hover:scale-105 relative group`}
-              >
-                <div className="text-bright text-xs font-light mb-1 break-all">
-                  {sensor.name}
-                </div>
-                <div className="text-soft text-xs font-mono">{valueText}</div>
+              return (
+                <div
+                  key={sensor.name}
+                  className={`${getStatusClass(sensor.status)} border rounded w-[72px] h-[52px] flex flex-col items-center justify-center cursor-pointer transition-colors hover:brightness-110 relative group`}
+                >
+                  <div className="text-bright text-xs font-light truncate max-w-[64px]">
+                    {sensor.name}
+                  </div>
+                  <div className="text-soft text-xs font-mono tabular-nums truncate max-w-[64px]">{valueText}</div>
 
-                {/* Tooltip */}
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-20 bg-surface text-bright text-xs rounded px-3 py-2 whitespace-pre-line border border-edge shadow-lg min-w-[180px]">
-                  <div className="font-semibold mb-1 text-accent">{sensor.name}</div>
-                  <div className="text-soft">最新值: <span className="text-bright font-mono">{valueText}</span></div>
-                  <div className="text-soft">更新时间: <span className="text-dim">{sensor.lastUpdate}</span></div>
-                  <div className="text-soft">状态: <span className={
-                    sensor.status === "danger" ? "text-err" :
-                    sensor.status === "warning" ? "text-warn" :
-                    sensor.status === "normal" ? "text-ok" : "text-dim"
-                  }>{statusText}</span></div>
-                  {/* Arrow */}
-                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-edge" />
+                  {/* Tooltip */}
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-20 bg-surface text-bright text-xs rounded px-3 py-2 whitespace-pre-line border border-edge shadow-lg min-w-[180px]">
+                    <div className="font-semibold mb-1 text-accent">{sensor.name}</div>
+                    <div className="text-soft">最新值: <span className="text-bright font-mono">{valueText}</span></div>
+                    <div className="text-soft">更新时间: <span className="text-dim">{sensor.lastUpdate}</span></div>
+                    <div className="text-soft">状态: <span className={
+                      sensor.status === "danger" ? "text-err" :
+                      sensor.status === "warning" ? "text-warn" :
+                      sensor.status === "normal" ? "text-ok" : "text-dim"
+                    }>{statusText}</span></div>
+                    {/* Arrow */}
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-edge" />
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
@@ -79,10 +87,15 @@ export const SensorGrid: React.FC<SensorGridProps> = ({ sensors }) => {
     <div className="industrial-card p-4">
       <div className="industrial-title text-xs mb-4">传感器状态网格</div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {renderSensorGroup("T (Gas/瓦斯)", tSensors, "text-ok")}
         {renderSensorGroup("WD (温度)", wdSensors, "text-note")}
         {renderSensorGroup("FS (风速)", fsSensors, "text-fs-sensor")}
+        {renderSensorGroup("WY (位移)", wySensors, "text-purple-400")}
+        {renderSensorGroup("YL (应力)", ylSensors, "text-orange-400")}
+        {renderSensorGroup("CO (一氧化碳)", coSensors, "text-red-400")}
+        {renderSensorGroup("SY (水压)", sySensors, "text-blue-400")}
+        {renderSensorGroup("LL (流量)", llSensors, "text-teal-400")}
       </div>
 
       {/* 图例 */}

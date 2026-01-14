@@ -105,27 +105,22 @@ export const WD_SENSOR_POSITIONS: Record<string, SensorPosition> = {
 };
 
 /**
- * FS传感器位置 (风速) - 共10个
- * 基于文档定义: FS010101-FS010105, FS010201-FS010202, FS010301-FS010302, FS010401
+ * FS传感器位置 (风速) - 共7个 (与 CSV 数据匹配)
+ * 基于 Merged_Data of Gas and FS.csv 实际列
  */
 export const FS_SENSOR_POSITIONS: Record<string, SensorPosition> = {
-  // ====== 三采区域 (5个: FS1-FS5) ======
-  FS010101: { x: 1256, y: 505, zone: 5, type: "FS" }, // FS1
-  FS010102: { x: 1286, y: 505, zone: 5, type: "FS" }, // FS2
-  FS010103: { x: 1316, y: 505, zone: 5, type: "FS" }, // FS3
-  FS010104: { x: 1346, y: 505, zone: 5, type: "FS" }, // FS4
-  FS010105: { x: 1375, y: 505, zone: 5, type: "FS" }, // FS5
+  // ====== 三采区域 (3个: FS1-FS3) ======
+  FS010103: { x: 1316, y: 505, zone: 5, type: "FS" }, // FS1
+  FS010104: { x: 1346, y: 505, zone: 5, type: "FS" }, // FS2
+  FS010105: { x: 1375, y: 505, zone: 5, type: "FS" }, // FS3
 
-  // ====== 四采水仓区域 (2个: FS6-FS7) ======
-  FS010201: { x: 1420, y: 505, zone: 5, type: "FS" }, // FS6
-  FS010202: { x: 1455, y: 505, zone: 5, type: "FS" }, // FS7
+  // ====== 四采水仓区域 (2个: FS4-FS5) ======
+  FS010201: { x: 1420, y: 505, zone: 5, type: "FS" }, // FS4
+  FS010202: { x: 1455, y: 505, zone: 5, type: "FS" }, // FS5
 
-  // ====== 四采轨道区域 (2个: FS8-FS9) ======
-  FS010301: { x: 1490, y: 505, zone: 5, type: "FS" }, // FS8
-  FS010302: { x: 1525, y: 505, zone: 5, type: "FS" }, // FS9
-
-  // ====== 四采北翼区域 (1个: FS10) ======
-  FS010401: { x: 1560, y: 505, zone: 5, type: "FS" }, // FS10
+  // ====== 四采轨道区域 (2个: FS6-FS7) ======
+  FS010301: { x: 1490, y: 505, zone: 5, type: "FS" }, // FS6
+  FS010302: { x: 1525, y: 505, zone: 5, type: "FS" }, // FS7
 };
 
 // 所有传感器位置

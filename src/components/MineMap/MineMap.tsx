@@ -39,17 +39,23 @@ interface AlertPair {
   status?: string;
 }
 
-// 根据状态获取连线颜色
+// 根据状态获取连线颜色（与气泡墙颜色一致）
 function getStatusColor(status?: string): string {
-  if (!status) return "#3B82F6"; // 默认蓝色
-  if (status.includes("WARNING")) return "#EF4444"; // 红色
-  if (status.includes("ABNORMAL")) return "#F59E0B"; // 橙色
-  return "#3B82F6"; // 正常蓝色
+  if (!status) return "#3B82F6"; // 蓝色 - 正常
+  if (status.includes("WARNING")) return "#EF4444"; // 红色 - 警告
+  if (status.includes("ABNORMAL")) return "#EAB308"; // 黄色 - 异常
+  return "#3B82F6"; // 蓝色 - 正常
 }
 
 // 巷道线条样式
 const TUNNEL_STROKE = "#4A5568";
 const TUNNEL_STROKE_WIDTH = 2;
+
+interface LineColorVisibility {
+  normal: boolean;   // 蓝色 - 正常
+  abnormal: boolean; // 橙色 - 异常
+  warning: boolean;  // 红色 - 警告
+}
 
 interface MineMapProps {
   sensorData?: SensorData;
@@ -57,6 +63,7 @@ interface MineMapProps {
   alertPairs?: AlertPair[];
   tlvThreshold?: number;
   showLabels?: boolean;
+  visibleLineColors?: LineColorVisibility;
 }
 
 /**
@@ -70,6 +77,7 @@ export function MineMap({
   alertPairs = [],
   tlvThreshold = 0.8,
   showLabels = true,
+  visibleLineColors = { normal: true, abnormal: true, warning: true },
 }: MineMapProps) {
   // 计算超TLV的传感器
   const tlvAlertSensors = useMemo(() => {
@@ -268,31 +276,41 @@ export function MineMap({
     </g>
   );
 
+  // 根据颜色可见性过滤飞线
+  const isLineVisible = (status?: string): boolean => {
+    if (!status) return visibleLineColors.normal;
+    if (status.includes("WARNING")) return visibleLineColors.warning;
+    if (status.includes("ABNORMAL")) return visibleLineColors.abnormal;
+    return visibleLineColors.normal;
+  };
+
   // 渲染飞线 - 显示所有传感器对的连线
   // 关键改进：使用传感器对作为稳定的 key，避免抖动
   const renderFlylines = () => (
     <g className="flylines">
-      {alertPairs.map((pair) => {
-        const pos1 = getSensorPosition(pair.sensor1);
-        const pos2 = getSensorPosition(pair.sensor2);
+      {alertPairs
+        .filter((pair) => isLineVisible(pair.status))
+        .map((pair) => {
+          const pos1 = getSensorPosition(pair.sensor1);
+          const pos2 = getSensorPosition(pair.sensor2);
 
-        if (!pos1 || !pos2) return null;
+          if (!pos1 || !pos2) return null;
 
-        const color = getStatusColor(pair.status);
-        // 使用排序后的传感器对作为稳定 key
-        const stableKey = [pair.sensor1, pair.sensor2].sort().join("-");
+          const color = getStatusColor(pair.status);
+          // 使用排序后的传感器对作为稳定 key
+          const stableKey = [pair.sensor1, pair.sensor2].sort().join("-");
 
-        return (
-          <Flyline
-            key={`flyline-${stableKey}`}
-            from={{ x: pos1.x, y: pos1.y }}
-            to={{ x: pos2.x, y: pos2.y }}
-            active={true}
-            color={color}
-            label={`r=${pair.cav.toFixed(2)}`}
-          />
-        );
-      })}
+          return (
+            <Flyline
+              key={`flyline-${stableKey}`}
+              from={{ x: pos1.x, y: pos1.y }}
+              to={{ x: pos2.x, y: pos2.y }}
+              active={true}
+              color={color}
+              label={`r=${pair.cav.toFixed(2)}`}
+            />
+          );
+        })}
     </g>
   );
 
@@ -431,7 +449,7 @@ export function MineMap({
       <svg
         width="100%"
         height="100%"
-        viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
+        viewBox="0 90 1600 460"
         className="bg-slate-950 rounded-lg"
         preserveAspectRatio="xMidYMid meet"
       >

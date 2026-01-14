@@ -15,7 +15,23 @@ export function formatValue(value: number | null): string {
   return value.toFixed(3).replace(/\.?0+$/, "");
 }
 
-// 根据值判断传感器状态（阈值只适用于T开头的传感器）
+// 传感器阈值配置
+const SENSOR_THRESHOLDS: Record<string, { warning: number; danger: number }> = {
+  // T 传感器（瓦斯浓度）: warning > 0.8, danger > 1.0
+  T: { warning: 0.8, danger: 1.0 },
+  // WY 传感器（位移）: warning > 3mm, danger > 10mm
+  WY: { warning: 3.0, danger: 10.0 },
+  // YL 传感器（应力）: warning > 15MPa, danger > 25MPa
+  YL: { warning: 15.0, danger: 25.0 },
+  // CO 传感器（一氧化碳）: warning > 0.5%, danger > 1.5%
+  CO: { warning: 0.5, danger: 1.5 },
+  // SY 传感器（水压）: warning > 0.6MPa, danger > 1.2MPa
+  SY: { warning: 0.6, danger: 1.2 },
+  // LL 传感器（流量）: warning > 5L/s, danger > 20L/s
+  LL: { warning: 5.0, danger: 20.0 },
+};
+
+// 根据值判断传感器状态
 export function getSensorStatus(
   value: number | null,
   sensorName: string
@@ -27,9 +43,15 @@ export function getSensorStatus(
     return "normal";
   }
 
-  // T开头的传感器使用阈值判断
-  if (value > 1.0) return "danger";
-  if (value > 0.8) return "warning";
+  // 获取传感器前缀并查找对应阈值
+  const prefix = sensorName.replace(/\d+$/, "");
+  const thresholds = SENSOR_THRESHOLDS[prefix];
+
+  if (thresholds) {
+    if (value > thresholds.danger) return "danger";
+    if (value > thresholds.warning) return "warning";
+  }
+
   return "normal";
 }
 

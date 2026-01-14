@@ -9,6 +9,7 @@ import { BubbleWallGrid } from "@/components/BubbleWall";
 import { MineMap } from "@/components/MineMap";
 import { TTWDGraph, TTFSGraph } from "@/components/SensorGraph";
 import { PredictionGrid } from "@/components/PredictionChart";
+import { DxfPreviewModal } from "@/components/DxfViewer/DxfPreviewModal";
 
 interface Bubble {
   sensor_pair: string[];
@@ -131,10 +132,18 @@ export default function Home() {
   const [sseConnected, setSseConnected] = useState(false);
   const sseConnectedRef = useRef(false);
 
+  // 矿洞地图连线颜色可见性
+  const [lineColorVisibility, setLineColorVisibility] = useState({
+    normal: true,   // 蓝色 - 正常
+    abnormal: true, // 黄色 - 异常
+    warning: true,  // 红色 - 警告
+  });
+
   // 累积传感器历史数据（用于实时预测曲线）
   const [sensorHistory, setSensorHistory] = useState<Record<string, number[]>>({});
   const HISTORY_WINDOW_SIZE = 180; // 保留最近180个点
   const [showDebug, setShowDebug] = useState(false);
+  const [showDxfModal, setShowDxfModal] = useState(false);
   const [debugData, setDebugData] = useState<{
     lastSseData: Record<string, unknown> | null;
     sseEventCount: number;
@@ -478,6 +487,12 @@ export default function Home() {
               <Link href="/admin" className="industrial-btn text-xs px-3 py-1.5 hover:border-accent">
                 分析管理
               </Link>
+              <button
+                onClick={() => setShowDxfModal(true)}
+                className="industrial-btn text-xs px-3 py-1.5 hover:border-accent"
+              >
+                巷道图
+              </button>
             </nav>
 
             {/* 状态指示 */}
@@ -613,116 +628,141 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 中间 - 矿洞地图 + 气泡墙 */}
-          <div className="col-span-6 flex flex-col gap-3">
-            {/* 矿洞地图 */}
-            <div className="industrial-card p-3 overflow-hidden" style={{ aspectRatio: "1600/550", maxHeight: "280px" }}>
-              <div className="industrial-title text-xs mb-2">矿洞地图</div>
+          {/* 右侧 - 矿洞地图（独占一行） + 气泡墙/预测（并排） */}
+          <div className="col-span-9 flex flex-col gap-3">
+            {/* 矿洞地图 - 占满宽度 */}
+            <div className="industrial-card p-3 overflow-hidden" style={{ maxHeight: "40vh" }}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="industrial-title text-xs">矿洞地图</div>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="text-slate-500">连线:</span>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={lineColorVisibility.normal}
+                      onChange={(e) => setLineColorVisibility(prev => ({ ...prev, normal: e.target.checked }))}
+                      className="w-3 h-3 rounded accent-blue-500"
+                    />
+                    <span className="text-blue-400">正常</span>
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={lineColorVisibility.abnormal}
+                      onChange={(e) => setLineColorVisibility(prev => ({ ...prev, abnormal: e.target.checked }))}
+                      className="w-3 h-3 rounded accent-yellow-500"
+                    />
+                    <span className="text-yellow-400">异常</span>
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={lineColorVisibility.warning}
+                      onChange={(e) => setLineColorVisibility(prev => ({ ...prev, warning: e.target.checked }))}
+                      className="w-3 h-3 rounded accent-red-500"
+                    />
+                    <span className="text-red-400">警告</span>
+                  </label>
+                </div>
+              </div>
               <div className="w-full h-[calc(100%-24px)]">
-              <MineMap
-                sensorData={sensorData}
-                alertSensors={alertSensors}
-                alertPairs={alertPairs}
-                tlvThreshold={0.8}
-                showLabels={true}
-              />
+                <MineMap
+                  sensorData={sensorData}
+                  alertSensors={alertSensors}
+                  alertPairs={alertPairs}
+                  tlvThreshold={0.8}
+                  showLabels={true}
+                  visibleLineColors={lineColorVisibility}
+                />
               </div>
             </div>
 
-            {/* 气泡墙 */}
-            <div className="industrial-card flex-1 p-3">
-              <div className="flex items-center justify-between mb-2">
-                <div className="industrial-title text-xs">气泡墙</div>
-                {bubbleWall?.summary && (
-                  <div className="flex gap-3 text-xs font-mono">
-                    <span className="text-ok">{bubbleWall.summary.normal_count}</span>
-                    <span className="text-warn">{bubbleWall.summary.abnormal_count}</span>
-                    <span className="text-err">{bubbleWall.summary.warning_count}</span>
-                  </div>
-                )}
-              </div>
-              {bubbleWall?.bubbles && bubbleWall.bubbles.length > 0 ? (
-                <BubbleWallGrid
-                  bubbles={bubbleWall.bubbles.map((b) => ({
-                    label: b.label,
-                    cav: b.cav,
-                    ulv: b.ulv,
-                    llv: b.llv,
-                    is_pair_dynamic: b.is_pair_dynamic,
-                    pair_history_count: b.pair_history_count,
-                    status: b.status,
-                    color: b.color,
-                    type: b.type,
-                    type_color: b.type_color,
-                  }))}
-                  globalThresholds={bubbleWall.global_thresholds}
-                  columns={12}
-                />
-              ) : (
-                <div className="h-40 flex flex-col items-center justify-center text-dim gap-3">
-                  {apiStatus === "connected" ? (
-                    <>
-                      <div className="text-center">
-                        <div className="text-soft mb-1">准备就绪</div>
-                        <div className="text-xs">点击下方按钮开始演示</div>
-                      </div>
-                      <button onClick={handleDemo} disabled={demoMode === "preparing"} className="industrial-btn-primary text-xs px-4 py-1.5">
-                        {demoMode === "preparing" ? "准备中..." : "开始演示"}
-                      </button>
-                    </>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                      <span>正在连接后端服务...</span>
+            {/* 下方：气泡墙 + 预测 并排 (6:3 比例) */}
+            <div className="flex-1 grid grid-cols-9 gap-3 min-h-0">
+              {/* 气泡墙 - 6列 */}
+              <div className="col-span-6 industrial-card p-3 overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="industrial-title text-xs">气泡墙</div>
+                  {bubbleWall?.summary && (
+                    <div className="flex gap-3 text-xs font-mono">
+                      <span className="text-ok">{bubbleWall.summary.normal_count}</span>
+                      <span className="text-warn">{bubbleWall.summary.abnormal_count}</span>
+                      <span className="text-err">{bubbleWall.summary.warning_count}</span>
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* 右侧 - 预测面板（20个T传感器） */}
-          <div className="col-span-3 flex flex-col max-h-[calc(100vh-180px)]">
-            <div className="industrial-card p-3 overflow-hidden h-full">
-              <div className="industrial-title text-xs mb-2">瓦斯浓度实时预测</div>
-              <div className="flex items-center justify-between text-xs text-dim mb-2 font-mono">
-                <span>{predictions.length} / {sensorConfig?.available?.T?.length || 0} 传感器</span>
-                <span className="text-cyan-400">
-                  历史: {Object.values(sensorHistory)[0]?.length || 0} / {HISTORY_WINDOW_SIZE}
-                </span>
-              </div>
-              <div className="overflow-y-auto h-[calc(100%-50px)] pr-1 custom-scrollbar">
-                {predictions.length > 0 ? (
-                  <PredictionGrid predictions={predictions} columns={1} chartHeight={140} />
-                ) : (
-                  <div className="space-y-2">
-                    {(sensorConfig?.available?.T?.slice(0, 6) || ["T010101", "T010102", "T010103", "T010104", "T010105", "T010106"]).map((sensor) => (
-                      <div key={sensor} className="bg-tertiary rounded p-2">
-                        <div className="text-xs text-dim mb-1 font-mono">{sensor.replace("T0", "T")}</div>
-                        <div className="h-8 flex items-center justify-center text-dim text-xs gap-2">
-                          <div className="w-3 h-3 border-2 border-muted border-t-transparent rounded-full animate-spin" />
-                          <span>等待数据...</span>
+                <div className="h-[calc(100%-32px)] overflow-auto">
+                  {bubbleWall?.bubbles && bubbleWall.bubbles.length > 0 ? (
+                    <BubbleWallGrid
+                      bubbles={bubbleWall.bubbles.map((b) => ({
+                        label: b.label,
+                        cav: b.cav,
+                        ulv: b.ulv,
+                        llv: b.llv,
+                        is_pair_dynamic: b.is_pair_dynamic,
+                        pair_history_count: b.pair_history_count,
+                        status: b.status,
+                        color: b.color,
+                        type: b.type,
+                        type_color: b.type_color,
+                      }))}
+                      globalThresholds={bubbleWall.global_thresholds}
+                      columns={12}
+                    />
+                  ) : (
+                    <div className="h-40 flex flex-col items-center justify-center text-dim gap-3">
+                      {apiStatus === "connected" ? (
+                        <>
+                          <div className="text-center">
+                            <div className="text-soft mb-1">准备就绪</div>
+                            <div className="text-xs">点击下方按钮开始演示</div>
+                          </div>
+                          <button onClick={handleDemo} disabled={demoMode === "preparing"} className="industrial-btn-primary text-xs px-4 py-1.5">
+                            {demoMode === "preparing" ? "准备中..." : "开始演示"}
+                          </button>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                          <span>正在连接后端服务...</span>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 预测面板 - 3列 */}
+              <div className="col-span-3 industrial-card p-3 overflow-hidden" style={{ maxHeight: "45vh" }}>
+                <div className="industrial-title text-xs mb-2">瓦斯浓度实时预测</div>
+                <div className="flex items-center justify-between text-xs text-dim mb-2 font-mono">
+                  <span>{predictions.length} / {sensorConfig?.available?.T?.length || 0} 传感器</span>
+                  <span className="text-cyan-400">
+                    历史: {Object.values(sensorHistory)[0]?.length || 0} / {HISTORY_WINDOW_SIZE}
+                  </span>
+                </div>
+                <div className="overflow-y-auto h-[calc(100%-50px)] pr-1 custom-scrollbar">
+                  {predictions.length > 0 ? (
+                    <PredictionGrid predictions={predictions} columns={1} chartHeight={140} />
+                  ) : (
+                    <div className="space-y-2">
+                      {(sensorConfig?.available?.T?.slice(0, 6) || ["T010101", "T010102", "T010103", "T010104", "T010105", "T010106"]).map((sensor) => (
+                        <div key={sensor} className="bg-tertiary rounded p-2">
+                          <div className="text-xs text-dim mb-1 font-mono">{sensor.replace("T0", "T")}</div>
+                          <div className="h-8 flex items-center justify-center text-dim text-xs gap-2">
+                            <div className="w-3 h-3 border-2 border-muted border-t-transparent rounded-full animate-spin" />
+                            <span>等待数据...</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-edge bg-surface px-4 py-2 text-center text-xs text-dim font-mono">
-        煤矿瓦斯监测预警系统 v1.0 | 传感器关联分析平台
-        <button
-          onClick={() => setShowDebug(!showDebug)}
-          className="ml-4 px-2 py-0.5 bg-tertiary hover:bg-muted rounded text-accent"
-        >
-          {showDebug ? "隐藏调试" : "显示调试"}
-        </button>
-      </footer>
 
       {/* Debug Panel */}
       {showDebug && (
@@ -819,6 +859,9 @@ export default function Home() {
           </details>
         </div>
       )}
+
+      {/* DXF 巷道图预览弹窗 */}
+      <DxfPreviewModal isOpen={showDxfModal} onClose={() => setShowDxfModal(false)} />
     </div>
   );
 }

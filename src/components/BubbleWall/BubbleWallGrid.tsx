@@ -126,14 +126,16 @@ export function BubbleWallGrid({
   const filteredBubbles = useMemo(() => {
     let filtered = bubbles;
 
+    // 不再过滤 cav=0 的卡片，所有传感器对都显示（disabled 状态）
+
     // 按类型过滤
     if (typeFilter !== "all") {
       filtered = filtered.filter((b) => b.type === typeFilter);
     }
 
-    // 只显示有数据的
+    // 只显示有数据的（用户可选）
     if (showOnlyWithData) {
-      filtered = filtered.filter((b) => b.has_data !== false);
+      filtered = filtered.filter((b) => b.has_data !== false && b.cav > 0);
     }
 
     // 限制显示数量（如果指定了 maxDisplay）
@@ -147,15 +149,15 @@ export function BubbleWallGrid({
   // 统计各状态数量
   const stats = useMemo(() => ({
     normal: bubbles.filter((b) =>
-      ["NORMAL", "HIGH_NORMAL", "LOW_NORMAL"].includes(b.status)
+      b.cav > 0 && ["NORMAL", "HIGH_NORMAL", "LOW_NORMAL"].includes(b.status)
     ).length,
     abnormal: bubbles.filter((b) =>
-      ["HIGH_ABNORMAL", "LOW_ABNORMAL"].includes(b.status)
+      b.cav > 0 && ["HIGH_ABNORMAL", "LOW_ABNORMAL"].includes(b.status)
     ).length,
     warning: bubbles.filter((b) =>
-      ["HIGH_WARNING", "LOW_WARNING"].includes(b.status)
+      b.cav > 0 && ["HIGH_WARNING", "LOW_WARNING"].includes(b.status)
     ).length,
-    noData: bubbles.filter((b) => b.has_data === false).length,
+    disabled: bubbles.filter((b) => b.cav === 0 || b.has_data === false).length,
     total: bubbles.length,
   }), [bubbles]);
 
@@ -190,10 +192,10 @@ export function BubbleWallGrid({
             <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
             警告: {stats.warning}
           </span>
-          {stats.noData > 0 && (
+          {stats.disabled > 0 && (
             <span className="flex items-center gap-1 text-slate-500">
               <span className="w-2.5 h-2.5 rounded-full bg-slate-600" />
-              无数据: {stats.noData}
+              暂无数据: {stats.disabled}
             </span>
           )}
         </div>

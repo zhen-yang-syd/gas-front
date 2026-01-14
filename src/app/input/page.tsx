@@ -38,11 +38,20 @@ const ALL_SENSOR_NAMES = [
   "WD010101", "WD010102", "WD010103", "WD010104", "WD010105", "WD010106",
   "WD010107", "WD010108", "WD010109", "WD010110", "WD010111",
   "WD010201", "WD010301", "WD010302", "WD010401", "WD010501",
-  // FS传感器 (10个)
-  "FS010101", "FS010102", "FS010103", "FS010104", "FS010105",
+  // FS传感器 (7个，与CSV匹配)
+  "FS010103", "FS010104", "FS010105",
   "FS010201", "FS010202",
   "FS010301", "FS010302",
-  "FS010401",
+  // WY传感器 (位移, 5个)
+  "WY1", "WY2", "WY3", "WY4", "WY5",
+  // YL传感器 (应力, 5个)
+  "YL1", "YL2", "YL3", "YL4", "YL5",
+  // CO传感器 (一氧化碳, 5个)
+  "CO1", "CO2", "CO3", "CO4", "CO5",
+  // SY传感器 (水压, 5个)
+  "SY1", "SY2", "SY3", "SY4", "SY5",
+  // LL传感器 (流量, 5个)
+  "LL1", "LL2", "LL3", "LL4", "LL5",
 ];
 
 export default function InputPage() {
@@ -67,7 +76,7 @@ export default function InputPage() {
   const [warnings, setWarnings] = useState<WarningRecord[]>([]);
   const [sensorStatuses, setSensorStatuses] = useState<SensorStatus[]>([]);
 
-  // 初始化：获取后端状态
+  // 初始化：获取后端状态和历史数据
   useEffect(() => {
     const initStatus = async () => {
       try {
@@ -86,6 +95,38 @@ export default function InputPage() {
           lastUpdate: formatSystemTime(),
         }));
         setSensorStatuses(initialStatuses);
+
+        // 获取历史数据填充表格（如果正在运行或已有进度）
+        if (status.current_index > 0) {
+          try {
+            const history = await controlApi.getHistory(DEFAULT_MAX_TABLE_ROWS);
+            if (history.records && history.records.length > 0) {
+              // 转换历史记录格式并填充表格
+              const historyRows: RowRecord[] = history.records.map((record) => ({
+                index: record.index,
+                timestamp: formatSystemTime(new Date(record.timestamp)),
+                sensors: record.sensors as Record<string, number | null>,
+              }));
+              setTableData(historyRows);
+
+              // 更新传感器状态为最后一条记录的值
+              const lastRecord = history.records[history.records.length - 1];
+              if (lastRecord) {
+                setSensorStatuses((prev) =>
+                  prev.map((s) => ({
+                    ...s,
+                    value: lastRecord.sensors[s.name] ?? null,
+                    status: getSensorStatus(lastRecord.sensors[s.name] ?? null, s.name),
+                    lastUpdate: formatSystemTime(new Date(lastRecord.timestamp)),
+                  }))
+                );
+              }
+              console.log(`Loaded ${history.count} historical records`);
+            }
+          } catch (historyErr) {
+            console.warn("Failed to load history:", historyErr);
+          }
+        }
       } catch (err) {
         console.error("Failed to connect to backend:", err);
         setLoadError("无法连接后端服务");
@@ -95,7 +136,7 @@ export default function InputPage() {
     initStatus();
   }, []);
 
-  // 定期轮询状态（每秒）
+  // 定期轮询状态（与首页统一：每2秒）
   useEffect(() => {
     if (!apiConnected) return;
 
@@ -119,7 +160,7 @@ export default function InputPage() {
       } catch (err) {
         console.error("Status poll failed:", err);
       }
-    }, 1000);
+    }, 2000);
 
     return () => clearInterval(pollInterval);
   }, [apiConnected, appState]);
@@ -150,84 +191,120 @@ export default function InputPage() {
     let reconnectTimeout: NodeJS.Timeout | null = null;
 
     const connectSSE = () => {
-      eventSource = new EventSource(`${API_BASE}/api/stream/analysis`);
+      // 使用 /api/stream/data 端点，按 freq 频率推送数据
+      eventSource = new EventSource(`${API_BASE}/api/stream/data`);
 
       eventSource.onopen = () => {
-        console.log("Input page SSE connected");
+        console.log("Input page SSE connected to /api/stream/data");
         setSseConnected(true);
       };
 
-      eventSource.addEventListener("analysis", (event) => {
+      eventSource.addEventListener("data", (event) => {
         try {
           const data = JSON.parse(event.data);
 
-          // 更新当前索引
-          if (typeof data.index === "number") {
-            setCurrentIndex(data.index);
-          }
-
-          // 处理传感器读数
-          if (data.sensor_readings) {
-            // 格式化时间戳：ISO 格式 -> YYYY/MM/DD_HH:mm:ss
-            const rawTimestamp = data.timestamp || new Date().toISOString();
-            const timestamp = formatSystemTime(new Date(rawTimestamp));
-            const readings = data.sensor_readings as Record<string, number>;
-
-            // 创建表格记录
-            const record: RowRecord = {
-              index: data.index || currentIndex,
-              timestamp,
-              sensors: readings,
-            };
-
-            // 更新表格数据
-            setTableData((prev) => {
-              const newData = [...prev, record];
-              return newData.slice(-DEFAULT_MAX_TABLE_ROWS);
-            });
-
-            // 更新传感器状态
-            setSensorStatuses((prev) => {
-              return prev.map((status) => {
-                const value = readings[status.name] ?? null;
-                const newStatus: SensorStatus = {
-                  name: status.name,
-                  value,
-                  status: getSensorStatus(value, status.name),
-                  lastUpdate: timestamp,
-                };
-
-                // 检查告警（只对T开头的传感器，value > 0.8）
-                if (status.name.startsWith("T") && value !== null && value > 0.8) {
-                  const alarm: AlarmRecord = {
-                    id: `${Date.now()}-${status.name}`,
-                    time: timestamp,
-                    sensor: status.name,
-                    value,
-                    rule: value > 1.0 ? ">1.0" : ">0.8",
-                  };
-                  setAlarms((prevAlarms) => {
-                    // 避免重复告警
-                    const exists = prevAlarms.some(
-                      (a) => a.sensor === status.name && a.time === timestamp
-                    );
-                    if (exists) return prevAlarms;
-                    const newAlarms = [...prevAlarms, alarm];
-                    return newAlarms.slice(-DEFAULT_MAX_ALARMS);
-                  });
-                }
-
-                return newStatus;
+          // 合并所有传感器数据为统一的 readings 格式
+          const readings: Record<string, number> = {};
+          const sensorTypes = ["T", "WD", "FS", "WY", "YL", "CO", "SY", "LL"];
+          sensorTypes.forEach((type) => {
+            if (data[type]) {
+              Object.entries(data[type]).forEach(([key, value]) => {
+                if (value !== null) readings[key] = value as number;
               });
+            }
+          });
+
+          // 使用本地时间（数据接收时的当前时间）
+          const timestamp = formatSystemTime();
+
+          // 创建表格记录
+          const record: RowRecord = {
+            index: data.index ?? currentIndex,
+            timestamp,
+            sensors: readings,
+          };
+
+          // 更新表格数据
+          setTableData((prev) => {
+            const newData = [...prev, record];
+            return newData.slice(-DEFAULT_MAX_TABLE_ROWS);
+          });
+
+          // 更新传感器状态
+          setSensorStatuses((prev) => {
+            return prev.map((status) => {
+              const value = readings[status.name] ?? null;
+              const newStatus: SensorStatus = {
+                name: status.name,
+                value,
+                status: getSensorStatus(value, status.name),
+                lastUpdate: timestamp,
+              };
+
+              // 传感器阈值配置（与 utils.ts 保持一致）
+              const sensorThresholds: Record<string, { warning: number; danger: number; preWarning?: number }> = {
+                T: { preWarning: 0.6, warning: 0.8, danger: 1.0 },
+                WY: { warning: 3.0, danger: 10.0 },
+                YL: { warning: 15.0, danger: 25.0 },
+                CO: { warning: 0.5, danger: 1.5 },
+                SY: { warning: 0.6, danger: 1.2 },
+                LL: { warning: 5.0, danger: 20.0 },
+              };
+
+              // 获取传感器前缀和对应阈值
+              const prefix = status.name.replace(/\d+$/, "");
+              const thresholds = sensorThresholds[prefix];
+
+              // 检查告警（所有有阈值的传感器）
+              if (thresholds && value !== null && value > thresholds.warning) {
+                const alarm: AlarmRecord = {
+                  id: `${Date.now()}-${status.name}`,
+                  time: timestamp,
+                  sensor: status.name,
+                  value,
+                  rule: value > thresholds.danger ? `>${thresholds.danger}` : `>${thresholds.warning}`,
+                };
+                setAlarms((prevAlarms) => {
+                  // 避免重复告警
+                  const exists = prevAlarms.some(
+                    (a) => a.sensor === status.name && a.time === timestamp
+                  );
+                  if (exists) return prevAlarms;
+                  const newAlarms = [...prevAlarms, alarm];
+                  return newAlarms.slice(-DEFAULT_MAX_ALARMS);
+                });
+              }
+
+              // 检查预警（仅对有 preWarning 的传感器，如 T 类型）
+              if (thresholds?.preWarning && value !== null && value > thresholds.preWarning && value <= thresholds.warning) {
+                const warning: WarningRecord = {
+                  id: `${Date.now()}-${status.name}-warn`,
+                  time: timestamp,
+                  sensor: status.name,
+                  value,
+                  rule: `>${thresholds.preWarning}`,
+                };
+                setWarnings((prevWarnings) => {
+                  // 避免重复预警
+                  const exists = prevWarnings.some(
+                    (w) => w.sensor === status.name && w.time === timestamp
+                  );
+                  if (exists) return prevWarnings;
+                  const newWarnings = [...prevWarnings, warning];
+                  return newWarnings.slice(-DEFAULT_MAX_ALARMS);
+                });
+              }
+
+              return newStatus;
             });
-          }
+          });
         } catch (e) {
           console.error("Failed to parse SSE data:", e);
         }
       });
 
-      eventSource.addEventListener("waiting", () => {
-        console.log("SSE waiting for data stream");
+      eventSource.addEventListener("stopped", () => {
+        console.log("SSE data stream stopped");
       });
 
       eventSource.onerror = () => {
@@ -244,7 +321,9 @@ export default function InputPage() {
       eventSource?.close();
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
-  }, [apiConnected, currentIndex]);
+    // 注意：不依赖 currentIndex，避免频繁重连 SSE
+    // data.index 从 SSE 数据中获取，不需要闭包中的 currentIndex
+  }, [apiConnected]);
 
   // 控制函数 - 调用后端API
   const handleStart = async () => {
