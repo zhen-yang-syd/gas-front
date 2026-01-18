@@ -504,10 +504,10 @@ export default function Home() {
           <div className="flex items-center gap-3">
             {/* 导航链接 */}
             <nav className="flex items-center gap-2 mr-4">
-              <Link href="/input" className="industrial-btn text-xs px-3 py-1.5 hover:border-accent hidden">
+              <Link href="/input" className="industrial-btn text-xs px-3 py-1.5 hover:border-accent">
                 数据输入
               </Link>
-              <Link href="/admin" className="industrial-btn text-xs px-3 py-1.5 hover:border-accent">
+              <Link href="/admin" className="industrial-btn text-xs px-3 py-1.5 hover:border-accent hidden">
                 分析管理
               </Link>
               <button

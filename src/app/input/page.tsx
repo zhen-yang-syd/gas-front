@@ -23,25 +23,7 @@ const DEFAULT_RATE_PER_MINUTE = 60;
 const DEFAULT_MAX_TABLE_ROWS = 200;
 const DEFAULT_MAX_ALARMS = 200;
 
-// 默认阈值（与后端 config.py 一致）
-const DEFAULT_ULV = 6.4247;
-const DEFAULT_LLV = 5.0634;
-const DEFAULT_CALV = 6.0;
-
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-// 气泡墙阈值类型（ULV/LLV）
-interface BubbleThresholdConfig {
-  ulv: number;
-  llv: number;
-}
-
-// 完整阈值类型（兼容后端 API）
-interface ThresholdConfig {
-  ulv: number;
-  llv: number;
-  calv: number;
-}
 
 // 核心传感器名称（T, WD, FS）
 const CORE_SENSOR_NAMES = [
@@ -93,45 +75,6 @@ export default function InputPage() {
   // 运行时间起始点
   const startTimeRef = useRef<number | null>(null);
 
-  // 气泡墙阈值配置状态（ULV/LLV）
-  const [bubbleThresholds, setBubbleThresholds] = useState<BubbleThresholdConfig>({
-    ulv: DEFAULT_ULV,
-    llv: DEFAULT_LLV,
-  });
-  const [bubbleThresholdInputs, setBubbleThresholdInputs] = useState<BubbleThresholdConfig>({
-    ulv: DEFAULT_ULV,
-    llv: DEFAULT_LLV,
-  });
-  const [bubbleThresholdError, setBubbleThresholdError] = useState<string | null>(null);
-  const [bubbleThresholdSaving, setBubbleThresholdSaving] = useState(false);
-  const [bubbleThresholdSaveSuccess, setBubbleThresholdSaveSuccess] = useState(false);
-
-  // CALV 告警阈值（独立配置）
-  const [calvThreshold, setCalvThreshold] = useState(DEFAULT_CALV);
-  const [calvInput, setCalvInput] = useState(DEFAULT_CALV);
-  const [calvError, setCalvError] = useState<string | null>(null);
-  const [calvSaving, setCalvSaving] = useState(false);
-  const [calvSaveSuccess, setCalvSaveSuccess] = useState(false);
-
-  // 检测气泡墙阈值是否有变化
-  const bubbleThresholdHasChanges =
-    bubbleThresholdInputs.ulv !== bubbleThresholds.ulv ||
-    bubbleThresholdInputs.llv !== bubbleThresholds.llv;
-
-  // 检测 CALV 是否有变化
-  const calvHasChanges = calvInput !== calvThreshold;
-
-  // CAV 实时数据
-  const [latestCav, setLatestCav] = useState<number | null>(null);
-
-  // 兼容旧变量（用于其他地方引用）
-  const thresholds = { ulv: bubbleThresholds.ulv, llv: bubbleThresholds.llv, calv: calvThreshold };
-  const thresholdInputs = { ulv: bubbleThresholdInputs.ulv, llv: bubbleThresholdInputs.llv, calv: calvInput };
-  const thresholdError = bubbleThresholdError;
-  const thresholdSaving = bubbleThresholdSaving;
-  const thresholdSaveSuccess = bubbleThresholdSaveSuccess;
-  const thresholdHasChanges = bubbleThresholdHasChanges;
-
   // 数据状态
   const [tableData, setTableData] = useState<RowRecord[]>([]);
   const [cavHistory, setCavHistory] = useState<CavHistoryRecord[]>([]);
@@ -147,22 +90,6 @@ export default function InputPage() {
         setCurrentIndex(status.current_index);
         setRatePerMinute(status.rate_per_minute);
         setAppState(status.is_running ? "running" : "stopped");
-
-        // 获取阈值配置
-        try {
-          const res = await fetch(`${API_BASE}/api/control/thresholds`);
-          if (res.ok) {
-            const data = await res.json();
-            // 气泡墙阈值 (ULV/LLV)
-            setBubbleThresholds({ ulv: data.ulv, llv: data.llv });
-            setBubbleThresholdInputs({ ulv: data.ulv, llv: data.llv });
-            // CALV 告警阈值
-            setCalvThreshold(data.calv);
-            setCalvInput(data.calv);
-          }
-        } catch (e) {
-          console.warn("Failed to fetch thresholds:", e);
-        }
 
         // 初始化传感器状态
         const initialStatuses: SensorStatus[] = ALL_SENSOR_NAMES.map((name) => ({
@@ -371,12 +298,6 @@ export default function InputPage() {
         try {
           const data = JSON.parse(event.data);
 
-          // 更新全局 CAV 值
-          const cavValue = data.cav?.latest ?? null;
-          if (cavValue !== null && typeof cavValue === "number") {
-            setLatestCav(cavValue);
-          }
-
           // 遍历 bubble_wall.bubbles，为每个有告警/预警状态的气泡创建记录
           const bubbles = data.bubble_wall?.bubbles ?? [];
           const timestamp = formatSystemTime();
@@ -427,7 +348,7 @@ export default function InputPage() {
       analysisSource?.close();
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
-  }, [apiConnected, calvThreshold]);
+  }, [apiConnected]);
 
   // 控制函数 - 调用后端API
   const handleStart = async () => {
@@ -488,107 +409,6 @@ export default function InputPage() {
     } catch (err) {
       console.error("Failed to seek:", err);
     }
-  };
-
-  // 保存气泡墙阈值 (ULV/LLV)
-  const handleSaveBubbleThresholds = async () => {
-    // 验证阈值: ULV > LLV > 0
-    if (bubbleThresholdInputs.ulv <= bubbleThresholdInputs.llv) {
-      setBubbleThresholdError("ULV 必须大于 LLV");
-      return;
-    }
-    if (bubbleThresholdInputs.llv <= 0) {
-      setBubbleThresholdError("阈值必须为正数");
-      return;
-    }
-
-    setBubbleThresholdError(null);
-    setBubbleThresholdSaving(true);
-
-    try {
-      // 保存时包含当前 CALV 值（后端 API 需要完整数据）
-      const res = await fetch(`${API_BASE}/api/control/thresholds`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ulv: bubbleThresholdInputs.ulv,
-          llv: bubbleThresholdInputs.llv,
-          calv: calvThreshold,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status === "updated") {
-          setBubbleThresholds({ ulv: data.ulv, llv: data.llv });
-          setBubbleThresholdSaveSuccess(true);
-          setTimeout(() => setBubbleThresholdSaveSuccess(false), 2000);
-        } else if (data.error) {
-          setBubbleThresholdError(data.error);
-        }
-      } else {
-        setBubbleThresholdError("保存失败");
-      }
-    } catch (err) {
-      console.error("Failed to save bubble thresholds:", err);
-      setBubbleThresholdError("网络错误");
-    } finally {
-      setBubbleThresholdSaving(false);
-    }
-  };
-
-  // 重置气泡墙阈值
-  const handleResetBubbleThresholds = () => {
-    setBubbleThresholdInputs({ ulv: DEFAULT_ULV, llv: DEFAULT_LLV });
-    setBubbleThresholdError(null);
-  };
-
-  // 保存 CALV 告警阈值
-  const handleSaveCalv = async () => {
-    if (calvInput <= 0) {
-      setCalvError("CALV 必须为正数");
-      return;
-    }
-
-    setCalvError(null);
-    setCalvSaving(true);
-
-    try {
-      // 保存时包含当前 ULV/LLV 值（后端 API 需要完整数据）
-      const res = await fetch(`${API_BASE}/api/control/thresholds`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ulv: bubbleThresholds.ulv,
-          llv: bubbleThresholds.llv,
-          calv: calvInput,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status === "updated") {
-          setCalvThreshold(data.calv);
-          setCalvSaveSuccess(true);
-          setTimeout(() => setCalvSaveSuccess(false), 2000);
-        } else if (data.error) {
-          setCalvError(data.error);
-        }
-      } else {
-        setCalvError("保存失败");
-      }
-    } catch (err) {
-      console.error("Failed to save CALV:", err);
-      setCalvError("网络错误");
-    } finally {
-      setCalvSaving(false);
-    }
-  };
-
-  // 重置 CALV
-  const handleResetCalv = () => {
-    setCalvInput(DEFAULT_CALV);
-    setCalvError(null);
   };
 
   // 加载中状态
@@ -654,8 +474,8 @@ export default function InputPage() {
 
       {/* Main Content */}
       <main className="p-4 space-y-4">
-        {/* 顶部：控制面板、阈值配置和系统状态 */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        {/* 顶部：控制面板和系统状态 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
             <ControlPanel
               ratePerMinute={ratePerMinute}
@@ -668,173 +488,6 @@ export default function InputPage() {
               isCompleted={appState === "completed"}
               totalRows={totalRows}
             />
-          </div>
-
-          {/* 气泡墙阈值配置面板 (ULV/LLV) */}
-          <div className="industrial-card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-accent">气泡墙阈值</h3>
-              <span className="text-xs text-dim">ULV &gt; LLV</span>
-            </div>
-
-            <div className="space-y-2">
-              {/* ULV 输入 */}
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-soft w-12">ULV:</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={bubbleThresholdInputs.ulv}
-                  onChange={(e) =>
-                    setBubbleThresholdInputs((prev) => ({
-                      ...prev,
-                      ulv: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                  className="flex-1 px-2 py-1 bg-base border border-edge rounded text-xs font-mono text-normal focus:border-accent focus:outline-none"
-                />
-                <span className="text-xs text-dim">上限</span>
-              </div>
-
-              {/* LLV 输入 */}
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-soft w-12">LLV:</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={bubbleThresholdInputs.llv}
-                  onChange={(e) =>
-                    setBubbleThresholdInputs((prev) => ({
-                      ...prev,
-                      llv: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                  className="flex-1 px-2 py-1 bg-base border border-edge rounded text-xs font-mono text-normal focus:border-accent focus:outline-none"
-                />
-                <span className="text-xs text-dim">下限</span>
-              </div>
-
-              {/* 错误提示 */}
-              {bubbleThresholdError && (
-                <div className="text-xs text-err">{bubbleThresholdError}</div>
-              )}
-
-              {/* 成功提示 */}
-              {bubbleThresholdSaveSuccess && (
-                <div className="text-xs text-ok flex items-center gap-1">
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  保存成功
-                </div>
-              )}
-
-              {/* 按钮 */}
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={handleSaveBubbleThresholds}
-                  disabled={bubbleThresholdSaving || !bubbleThresholdHasChanges}
-                  className={`flex-1 industrial-btn text-xs py-1.5 transition-all ${
-                    bubbleThresholdHasChanges
-                      ? "bg-accent/20 hover:bg-accent/30 border-accent text-accent"
-                      : "bg-tertiary border-edge text-dim cursor-not-allowed"
-                  } disabled:opacity-50`}
-                >
-                  {bubbleThresholdSaving ? "保存中..." : bubbleThresholdHasChanges ? "保存修改" : "已保存"}
-                </button>
-                <button
-                  onClick={handleResetBubbleThresholds}
-                  className="industrial-btn text-xs py-1.5 hover:border-soft"
-                >
-                  重置
-                </button>
-              </div>
-
-              {/* 当前生效值 */}
-              <div className="pt-2 border-t border-edge text-xs text-dim">
-                当前: ULV={bubbleThresholds.ulv.toFixed(2)}, LLV={bubbleThresholds.llv.toFixed(2)}
-              </div>
-            </div>
-          </div>
-
-          {/* CAV 告警阈值配置面板 (CALV) */}
-          <div className="industrial-card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-warn">CAV 告警阈值</h3>
-              {latestCav !== null && (
-                <span className={`text-xs font-mono ${
-                  latestCav > calvThreshold ? "text-err" :
-                  latestCav > calvThreshold * 0.85 ? "text-warn" : "text-ok"
-                }`}>
-                  CAV: {latestCav.toFixed(4)}
-                </span>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              {/* CALV 输入 */}
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-soft w-12">CALV:</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={calvInput}
-                  onChange={(e) => setCalvInput(parseFloat(e.target.value) || 0)}
-                  className="flex-1 px-2 py-1 bg-base border border-edge rounded text-xs font-mono text-normal focus:border-accent focus:outline-none"
-                />
-                <span className="text-xs text-err">告警</span>
-              </div>
-
-              {/* 85% 预警阈值（只读显示） */}
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-soft w-12">85%:</label>
-                <span className="flex-1 px-2 py-1 bg-tertiary border border-edge rounded text-xs font-mono text-dim">
-                  {(calvInput * 0.85).toFixed(4)}
-                </span>
-                <span className="text-xs text-warn">预警</span>
-              </div>
-
-              {/* 错误提示 */}
-              {calvError && (
-                <div className="text-xs text-err">{calvError}</div>
-              )}
-
-              {/* 成功提示 */}
-              {calvSaveSuccess && (
-                <div className="text-xs text-ok flex items-center gap-1">
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  保存成功
-                </div>
-              )}
-
-              {/* 按钮 */}
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={handleSaveCalv}
-                  disabled={calvSaving || !calvHasChanges}
-                  className={`flex-1 industrial-btn text-xs py-1.5 transition-all ${
-                    calvHasChanges
-                      ? "bg-warn/20 hover:bg-warn/30 border-warn text-warn"
-                      : "bg-tertiary border-edge text-dim cursor-not-allowed"
-                  } disabled:opacity-50`}
-                >
-                  {calvSaving ? "保存中..." : calvHasChanges ? "保存修改" : "已保存"}
-                </button>
-                <button
-                  onClick={handleResetCalv}
-                  className="industrial-btn text-xs py-1.5 hover:border-soft"
-                >
-                  重置
-                </button>
-              </div>
-
-              {/* 当前生效值 */}
-              <div className="pt-2 border-t border-edge text-xs text-dim">
-                当前: CALV={calvThreshold.toFixed(4)} (85%={((calvThreshold * 0.85)).toFixed(4)})
-              </div>
-            </div>
           </div>
 
           <div>

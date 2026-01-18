@@ -4,6 +4,19 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { healthCheck, analysisApi } from "@/lib/api";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// 默认阈值（与后端 config.py 一致）
+const DEFAULT_ULV = 6.4247;
+const DEFAULT_LLV = 5.0634;
+const DEFAULT_CALV = 6.0;
+
+// 气泡墙阈值类型（ULV/LLV）
+interface BubbleThresholdConfig {
+  ulv: number;
+  llv: number;
+}
+
 interface GroupValidityDetail {
   overall_valid: boolean;
   cronbach_alpha?: { value: number; threshold: number; passed: boolean; interpretation?: string };
@@ -73,11 +86,59 @@ export default function AdminPage() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [selectedType, setSelectedType] = useState<"T-T" | "T-WD" | "T-FS">("T-T");
 
-  // 检查API连接
+  // 气泡墙阈值配置状态（ULV/LLV）
+  const [bubbleThresholds, setBubbleThresholds] = useState<BubbleThresholdConfig>({
+    ulv: DEFAULT_ULV,
+    llv: DEFAULT_LLV,
+  });
+  const [bubbleThresholdInputs, setBubbleThresholdInputs] = useState<BubbleThresholdConfig>({
+    ulv: DEFAULT_ULV,
+    llv: DEFAULT_LLV,
+  });
+  const [bubbleThresholdError, setBubbleThresholdError] = useState<string | null>(null);
+  const [bubbleThresholdSaving, setBubbleThresholdSaving] = useState(false);
+  const [bubbleThresholdSaveSuccess, setBubbleThresholdSaveSuccess] = useState(false);
+
+  // CALV 告警阈值（独立配置）
+  const [calvThreshold, setCalvThreshold] = useState(DEFAULT_CALV);
+  const [calvInput, setCalvInput] = useState(DEFAULT_CALV);
+  const [calvError, setCalvError] = useState<string | null>(null);
+  const [calvSaving, setCalvSaving] = useState(false);
+  const [calvSaveSuccess, setCalvSaveSuccess] = useState(false);
+
+  // 检测气泡墙阈值是否有变化
+  const bubbleThresholdHasChanges =
+    bubbleThresholdInputs.ulv !== bubbleThresholds.ulv ||
+    bubbleThresholdInputs.llv !== bubbleThresholds.llv;
+
+  // 检测 CALV 是否有变化
+  const calvHasChanges = calvInput !== calvThreshold;
+
+  // 检查API连接并获取阈值配置
   useEffect(() => {
-    healthCheck()
-      .then(() => setApiStatus("connected"))
-      .catch(() => setApiStatus("error"));
+    const init = async () => {
+      try {
+        await healthCheck();
+        setApiStatus("connected");
+
+        // 获取阈值配置
+        try {
+          const res = await fetch(`${API_BASE}/api/control/thresholds`);
+          if (res.ok) {
+            const data = await res.json();
+            setBubbleThresholds({ ulv: data.ulv, llv: data.llv });
+            setBubbleThresholdInputs({ ulv: data.ulv, llv: data.llv });
+            setCalvThreshold(data.calv);
+            setCalvInput(data.calv);
+          }
+        } catch (e) {
+          console.warn("Failed to fetch thresholds:", e);
+        }
+      } catch {
+        setApiStatus("error");
+      }
+    };
+    init();
   }, []);
 
   // 获取数据
@@ -107,6 +168,90 @@ export default function AdminPage() {
       console.error("Failed to fetch data:", e);
     }
   }, []);
+
+  // 保存气泡墙阈值 (ULV/LLV)
+  const handleSaveBubbleThresholds = async () => {
+    setBubbleThresholdError(null);
+    setBubbleThresholdSaving(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/control/thresholds`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ulv: bubbleThresholdInputs.ulv,
+          llv: bubbleThresholdInputs.llv,
+          calv: calvThreshold,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === "updated") {
+          setBubbleThresholds({ ulv: data.ulv, llv: data.llv });
+          setBubbleThresholdSaveSuccess(true);
+          setTimeout(() => setBubbleThresholdSaveSuccess(false), 2000);
+        } else if (data.error) {
+          setBubbleThresholdError(data.error);
+        }
+      } else {
+        setBubbleThresholdError("保存失败");
+      }
+    } catch (err) {
+      console.error("Failed to save bubble thresholds:", err);
+      setBubbleThresholdError("网络错误");
+    } finally {
+      setBubbleThresholdSaving(false);
+    }
+  };
+
+  // 重置气泡墙阈值
+  const handleResetBubbleThresholds = () => {
+    setBubbleThresholdInputs({ ulv: DEFAULT_ULV, llv: DEFAULT_LLV });
+    setBubbleThresholdError(null);
+  };
+
+  // 保存 CALV 告警阈值
+  const handleSaveCalv = async () => {
+    setCalvError(null);
+    setCalvSaving(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/control/thresholds`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ulv: bubbleThresholds.ulv,
+          llv: bubbleThresholds.llv,
+          calv: calvInput,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === "updated") {
+          setCalvThreshold(data.calv);
+          setCalvSaveSuccess(true);
+          setTimeout(() => setCalvSaveSuccess(false), 2000);
+        } else if (data.error) {
+          setCalvError(data.error);
+        }
+      } else {
+        setCalvError("保存失败");
+      }
+    } catch (err) {
+      console.error("Failed to save CALV:", err);
+      setCalvError("网络错误");
+    } finally {
+      setCalvSaving(false);
+    }
+  };
+
+  // 重置 CALV
+  const handleResetCalv = () => {
+    setCalvInput(DEFAULT_CALV);
+    setCalvError(null);
+  };
 
   // 初始加载和自动刷新
   useEffect(() => {
@@ -220,6 +365,155 @@ export default function AdminPage() {
       </header>
 
       <main className="p-4">
+        {/* 阈值配置区域 */}
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          {/* 气泡墙阈值配置面板 (ULV/LLV) */}
+          <div className="industrial-card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-accent">气泡墙阈值</h3>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-soft w-12">ULV:</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={bubbleThresholdInputs.ulv}
+                  onChange={(e) =>
+                    setBubbleThresholdInputs((prev) => ({
+                      ...prev,
+                      ulv: parseFloat(e.target.value) || 0,
+                    }))
+                  }
+                  className="flex-1 px-2 py-1 bg-base border border-edge rounded text-xs font-mono text-normal focus:border-accent focus:outline-none"
+                />
+                <span className="text-xs text-dim">上限</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-soft w-12">LLV:</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={bubbleThresholdInputs.llv}
+                  onChange={(e) =>
+                    setBubbleThresholdInputs((prev) => ({
+                      ...prev,
+                      llv: parseFloat(e.target.value) || 0,
+                    }))
+                  }
+                  className="flex-1 px-2 py-1 bg-base border border-edge rounded text-xs font-mono text-normal focus:border-accent focus:outline-none"
+                />
+                <span className="text-xs text-dim">下限</span>
+              </div>
+
+              {bubbleThresholdError && (
+                <div className="text-xs text-err">{bubbleThresholdError}</div>
+              )}
+
+              {bubbleThresholdSaveSuccess && (
+                <div className="text-xs text-ok flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  保存成功
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleSaveBubbleThresholds}
+                  disabled={bubbleThresholdSaving || !bubbleThresholdHasChanges}
+                  className={`flex-1 industrial-btn text-xs py-1.5 transition-all ${
+                    bubbleThresholdHasChanges
+                      ? "bg-accent/20 hover:bg-accent/30 border-accent text-accent"
+                      : "bg-tertiary border-edge text-dim cursor-not-allowed"
+                  } disabled:opacity-50`}
+                >
+                  {bubbleThresholdSaving ? "保存中..." : bubbleThresholdHasChanges ? "保存修改" : "已保存"}
+                </button>
+                <button
+                  onClick={handleResetBubbleThresholds}
+                  className="industrial-btn text-xs py-1.5 hover:border-soft"
+                >
+                  重置
+                </button>
+              </div>
+
+              <div className="pt-2 border-t border-edge text-xs text-dim">
+                当前: ULV={bubbleThresholds.ulv.toFixed(2)}, LLV={bubbleThresholds.llv.toFixed(2)}
+              </div>
+            </div>
+          </div>
+
+          {/* CAV 告警阈值配置面板 (CALV) */}
+          <div className="industrial-card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-warn">CAV 告警阈值</h3>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-soft w-12">CALV:</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={calvInput}
+                  onChange={(e) => setCalvInput(parseFloat(e.target.value) || 0)}
+                  className="flex-1 px-2 py-1 bg-base border border-edge rounded text-xs font-mono text-normal focus:border-accent focus:outline-none"
+                />
+                <span className="text-xs text-err">告警</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-soft w-12">85%:</label>
+                <span className="flex-1 px-2 py-1 bg-tertiary border border-edge rounded text-xs font-mono text-dim">
+                  {(calvInput * 0.85).toFixed(4)}
+                </span>
+                <span className="text-xs text-warn">预警</span>
+              </div>
+
+              {calvError && (
+                <div className="text-xs text-err">{calvError}</div>
+              )}
+
+              {calvSaveSuccess && (
+                <div className="text-xs text-ok flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  保存成功
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleSaveCalv}
+                  disabled={calvSaving || !calvHasChanges}
+                  className={`flex-1 industrial-btn text-xs py-1.5 transition-all ${
+                    calvHasChanges
+                      ? "bg-warn/20 hover:bg-warn/30 border-warn text-warn"
+                      : "bg-tertiary border-edge text-dim cursor-not-allowed"
+                  } disabled:opacity-50`}
+                >
+                  {calvSaving ? "保存中..." : calvHasChanges ? "保存修改" : "已保存"}
+                </button>
+                <button
+                  onClick={handleResetCalv}
+                  className="industrial-btn text-xs py-1.5 hover:border-soft"
+                >
+                  重置
+                </button>
+              </div>
+
+              <div className="pt-2 border-t border-edge text-xs text-dim">
+                当前: CALV={calvThreshold.toFixed(4)} (85%={((calvThreshold * 0.85)).toFixed(4)})
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* 类型选择 */}
         <div className="flex gap-2 mb-4">
           {(["T-T", "T-WD", "T-FS"] as const).map((type) => (
