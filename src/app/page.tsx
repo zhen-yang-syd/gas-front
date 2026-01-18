@@ -134,6 +134,9 @@ export default function Home() {
   const [sseConnected, setSseConnected] = useState(false);
   const sseConnectedRef = useRef(false);
 
+  // 使用 ref 保持 fetchPredictions 的稳定引用，避免 SSE useEffect 重连循环
+  const fetchPredictionsRef = useRef<() => Promise<void>>(() => Promise.resolve());
+
   // 矿洞地图连线颜色可见性
   const [lineColorVisibility, setLineColorVisibility] = useState({
     normal: true,   // 蓝色 - 正常
@@ -151,7 +154,7 @@ export default function Home() {
   // 累积传感器历史数据（用于实时预测曲线）
   const [sensorHistory, setSensorHistory] = useState<Record<string, number[]>>({});
   const HISTORY_WINDOW_SIZE = 180; // 保留最近180个点
-  const [showDebug, setShowDebug] = useState(false);
+  const [showDebug] = useState(false);
   const [showDxfModal, setShowDxfModal] = useState(false);
   const [debugData, setDebugData] = useState<{
     lastSseData: Record<string, unknown> | null;
@@ -264,6 +267,11 @@ export default function Home() {
     setPredictions(results);
   }, [sensorConfig, sensorHistory]);
 
+  // 保持 fetchPredictions 的最新引用
+  useEffect(() => {
+    fetchPredictionsRef.current = fetchPredictions;
+  }, [fetchPredictions]);
+
   useEffect(() => {
     sseConnectedRef.current = sseConnected;
   }, [sseConnected]);
@@ -279,10 +287,11 @@ export default function Home() {
         fetchStatus(),
         // fetchBubbleWall() 移除 - 由 SSE 推送
         // fetchCorrelations() 移除 - 只在运行时获取，初始为空
-        fetchPredictions(),
+        fetchPredictionsRef.current(),
       ]);
     })();
-  }, [apiStatus, fetchStatus, fetchPredictions]);
+    // 注意：不依赖 fetchPredictions，使用 ref 调用，避免重复执行
+  }, [apiStatus, fetchStatus]);
 
   // SSE 实时数据流
   useEffect(() => {
@@ -394,7 +403,8 @@ export default function Home() {
     connectSSE();
 
     const statusInterval = setInterval(() => void fetchStatus(), 2000);
-    const predictionInterval = setInterval(() => void fetchPredictions(), 30000); // 30秒更新预测
+    // 使用 ref 调用 fetchPredictions，避免依赖变化导致 SSE 重连
+    const predictionInterval = setInterval(() => void fetchPredictionsRef.current(), 30000); // 30秒更新预测
     // 相关性数据只在运行时获取（由单独的 useEffect 控制）
 
     // 移除 fallbackInterval - 气泡墙完全由 SSE 推送
@@ -406,14 +416,16 @@ export default function Home() {
       clearInterval(statusInterval);
       clearInterval(predictionInterval);
     };
-  }, [apiStatus, fetchStatus, fetchPredictions]);
+    // 关键修复：移除 fetchPredictions 依赖，避免 sensorHistory 变化导致 SSE 重连循环
+    // fetchPredictions 通过 ref 调用，始终获取最新版本
+  }, [apiStatus, fetchStatus]);
 
   // 相关性数据只在运行时获取
   useEffect(() => {
     if (!systemStatus?.is_running) return;
 
-    // 开始运行时立即获取一次
-    fetchCorrelations();
+    // 开始运行时立即获取一次（使用 queueMicrotask 避免同步 setState）
+    queueMicrotask(() => void fetchCorrelations());
 
     // 然后每15秒更新
     const correlationInterval = setInterval(() => void fetchCorrelations(), 15000);
@@ -492,7 +504,7 @@ export default function Home() {
           <div className="flex items-center gap-3">
             {/* 导航链接 */}
             <nav className="flex items-center gap-2 mr-4">
-              <Link href="/input" className="industrial-btn text-xs px-3 py-1.5 hover:border-accent">
+              <Link href="/input" className="industrial-btn text-xs px-3 py-1.5 hover:border-accent hidden">
                 数据输入
               </Link>
               <Link href="/admin" className="industrial-btn text-xs px-3 py-1.5 hover:border-accent">
@@ -553,7 +565,7 @@ export default function Home() {
                 <span className="text-soft">{systemStatus.is_running ? "运行中" : "已停止"}</span>
               </div>
               {systemStatus.datasets ? (
-                <div className="flex items-center gap-3">
+                <div className="hidden">
                   <div className="flex items-center gap-1" title="Gas-Gas (T-T分析)">
                     <span className="text-dim">T-T:</span>
                     <span className="text-bright">{systemStatus.datasets.gas_gas.current}</span>

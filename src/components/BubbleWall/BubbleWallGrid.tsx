@@ -235,7 +235,6 @@ export function BubbleWallGrid({
             <span className="text-slate-500">阈值:</span>
             <span className="font-mono text-[10px]">
               ULV=<span className="text-red-400">{(globalThresholds.ulv ?? 6.42).toFixed(2)}</span>
-              {" "}CALV=<span className="text-yellow-400">{(globalThresholds.calv ?? 6.0).toFixed(2)}</span>
               {" "}LLV=<span className="text-blue-400">{(globalThresholds.llv ?? 5.06).toFixed(2)}</span>
             </span>
             <span className="text-slate-600 text-[10px]">(在 Input 页面配置)</span>
@@ -346,10 +345,10 @@ export function BubbleWallGrid({
             CAV &gt; <span className="text-red-400">ULV ({(globalThresholds.ulv ?? 6.42).toFixed(2)})</span> = 警告
           </span>
           <span className="font-mono">
-            CAV &gt; <span className="text-yellow-400">CALV ({(globalThresholds.calv ?? 6.0).toFixed(2)})</span> = 异常
+            CAV &gt;= <span className="text-blue-400">LLV ({(globalThresholds.llv ?? 5.06).toFixed(2)})</span> = 正常
           </span>
           <span className="font-mono">
-            CAV &gt;= <span className="text-blue-400">LLV ({(globalThresholds.llv ?? 5.06).toFixed(2)})</span> = 正常
+            CAV &lt; <span className="text-yellow-400">LLV</span> = 异常
           </span>
         </div>
       </div>

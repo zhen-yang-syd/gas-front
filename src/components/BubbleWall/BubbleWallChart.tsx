@@ -203,10 +203,6 @@ export function BubbleWallChart({
                   {" "}<span className="text-slate-500">(超过=警告)</span>
                 </div>
                 <div>
-                  CALV: <span className="text-yellow-400 font-mono">{calv.toFixed(2)}</span>
-                  {" "}<span className="text-slate-500">(超过=异常)</span>
-                </div>
-                <div>
                   LLV: <span className="text-blue-400 font-mono">{llv.toFixed(2)}</span>
                   {" "}<span className="text-slate-500">(低于=异常)</span>
                 </div>

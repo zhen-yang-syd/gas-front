@@ -97,19 +97,20 @@ export function PredictionChart({
     const thresholdValue = 0.8;
 
     // 95% 置信区间数据（带子形式，跟随预测线形状）
-    // 上界数据：历史部分为 null，预测部分为 upperBound
+    // 起始点收口：上界/下界在"现在"点与当前值重合，然后逐渐扩散
+    // 上界数据：历史部分为 null，起始点为当前值，然后是 upperBound
     const upperBoundData = upperBound && upperBound.length > 0
       ? [
           ...Array(historyLen - 1).fill(null),
-          upperBound[0],  // 连接点使用第一个上界值
+          currentValue,  // 收口：起始点使用当前值
           ...upperBound,
         ]
       : [];
-    // 下界数据：历史部分为 null，预测部分为 lowerBound
+    // 下界数据：历史部分为 null，起始点为当前值，然后是 lowerBound
     const lowerBoundData = lowerBound && lowerBound.length > 0
       ? [
           ...Array(historyLen - 1).fill(null),
-          lowerBound[0],  // 连接点使用第一个下界值
+          currentValue,  // 收口：起始点使用当前值
           ...lowerBound,
         ]
       : [];

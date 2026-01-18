@@ -101,8 +101,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         </button>
       </div>
 
-      {/* 跳转 */}
-      <div>
+      {/* 跳转 - 已隐藏 */}
+      <div className="hidden">
         <label className="text-xs text-dim mb-2 block">跳转到索引</label>
         <form onSubmit={handleJumpSubmit} className="flex items-center gap-2">
           <input
