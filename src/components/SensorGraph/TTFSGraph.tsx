@@ -10,9 +10,23 @@ interface CorrelationItem {
   strength: string;
 }
 
+interface Bubble {
+  sensor_pair: string[];
+  status: string;
+  color: string;
+}
+
+interface LineColorVisibility {
+  normal: boolean;
+  abnormal: boolean;
+  warning: boolean;
+}
+
 interface TTFSGraphProps {
   tTCorrelations?: CorrelationItem[];
   tFsCorrelations: CorrelationItem[];
+  bubbles?: Bubble[];  // 气泡墙数据，用于获取传感器对的状态颜色
+  visibleLineColors?: LineColorVisibility;  // 连线颜色可见性开关
   width?: number;
   height?: number;
 }
@@ -49,10 +63,26 @@ const NODE_COLORS = {
   FS: "#f97316",  // 橙色 - FS传感器
 };
 
-const LINK_COLORS = {
-  "T-T": "#06b6d4",   // 青色
-  "T-FS": "#1e3a5f",  // 深蓝
-};
+// 默认颜色（蓝色 - 正常/无数据）
+const DEFAULT_LINK_COLOR = "#3B82F6";
+
+// 根据传感器对从 bubbleWall 获取颜色
+function getLinkColorFromBubbles(
+  sensor1: string,
+  sensor2: string,
+  bubbles?: Bubble[]
+): string {
+  if (!bubbles || bubbles.length === 0) return DEFAULT_LINK_COLOR;
+
+  // 在 bubbles 中查找匹配的传感器对
+  const bubble = bubbles.find((b) => {
+    const [s1, s2] = b.sensor_pair;
+    return (s1 === sensor1 && s2 === sensor2) || (s1 === sensor2 && s2 === sensor1);
+  });
+
+  // 如果找到，返回气泡墙中定义的颜色
+  return bubble?.color || DEFAULT_LINK_COLOR;
+}
 
 // 显示连线的最小相关系数阈值（只显示显著相关的连接）
 const MIN_CORRELATION_THRESHOLD = 0.3;
@@ -91,10 +121,29 @@ function getLinkStyle(r: number, hasData: boolean) {
 export function TTFSGraph({
   tTCorrelations = [],
   tFsCorrelations,
+  bubbles,
+  visibleLineColors = { normal: true, abnormal: true, warning: true },
   width = 280,
   height = 420,
 }: TTFSGraphProps) {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
+
+  // 根据连线颜色判断是否可见（与矿洞地图一致）
+  const isLineVisible = (sensor1: string, sensor2: string): boolean => {
+    if (!bubbles || bubbles.length === 0) return visibleLineColors.normal;
+
+    const bubble = bubbles.find((b) => {
+      const [s1, s2] = b.sensor_pair;
+      return (s1 === sensor1 && s2 === sensor2) || (s1 === sensor2 && s2 === sensor1);
+    });
+
+    if (!bubble) return visibleLineColors.normal;
+
+    const status = bubble.status || "";
+    if (status.includes("WARNING")) return visibleLineColors.warning;
+    if (status.includes("ABNORMAL")) return visibleLineColors.abnormal;
+    return visibleLineColors.normal;
+  };
 
   // 构建相关性查找表
   const { tTMap, tFsMap } = useMemo(() => {
@@ -236,8 +285,8 @@ export function TTFSGraph({
       <div className="flex items-center justify-between text-xs mb-2 px-1">
         <span className="font-mono text-accent uppercase tracking-wider">T-T-FS</span>
         <div className="flex gap-3 text-dim">
-          <span style={{ color: LINK_COLORS["T-T"] }}>T-T: {stats.tT}</span>
-          <span style={{ color: LINK_COLORS["T-FS"] }}>T-FS: {stats.tFs}</span>
+          <span className="text-soft">T-T: {stats.tT}</span>
+          <span className="text-soft">T-FS: {stats.tFs}</span>
         </div>
       </div>
 
@@ -267,80 +316,92 @@ export function TTFSGraph({
 
           {/* T-T 直线（列1到列2） */}
           <g className="t-t-links">
-            {tTLinks.map((link) => (
-              <g key={link.id}>
-                {/* 可见线条 */}
-                <line
-                  x1={link.x1} y1={link.y1}
-                  x2={link.x2} y2={link.y2}
-                  stroke={LINK_COLORS["T-T"]}
-                  strokeWidth={hoveredLink === link.id ? link.width + 1 : link.width}
-                  strokeOpacity={hoveredLink === link.id ? 1 : link.opacity}
-                  style={{ transition: "stroke-width 0.2s, stroke-opacity 0.2s", pointerEvents: "none" }}
-                />
-                {/* 透明点击区域（固定宽度，不抖动） */}
-                <line
-                  x1={link.x1} y1={link.y1}
-                  x2={link.x2} y2={link.y2}
-                  stroke="transparent"
-                  strokeWidth={8}
-                  style={{ cursor: "pointer" }}
-                  onMouseEnter={() => setHoveredLink(link.id)}
-                  onMouseLeave={() => setHoveredLink(null)}
-                />
-                {link.animated && (
+            {tTLinks.map((link) => {
+              const [s1, s2] = link.id.split("-");
+              // 根据颜色可见性过滤
+              if (!isLineVisible(s1, s2)) return null;
+              const linkColor = getLinkColorFromBubbles(s1, s2, bubbles);
+              return (
+                <g key={link.id}>
+                  {/* 可见线条 */}
                   <line
                     x1={link.x1} y1={link.y1}
                     x2={link.x2} y2={link.y2}
-                    stroke={LINK_COLORS["T-T"]}
-                    strokeWidth={link.width}
-                    strokeOpacity={0.4}
-                    strokeDasharray="3,6"
-                    className="animate-dash"
-                    style={{ pointerEvents: "none" }}
+                    stroke={linkColor}
+                    strokeWidth={hoveredLink === link.id ? link.width + 1 : link.width}
+                    strokeOpacity={hoveredLink === link.id ? 1 : link.opacity}
+                    style={{ transition: "stroke 0.3s, stroke-width 0.2s, stroke-opacity 0.2s", pointerEvents: "none" }}
                   />
-                )}
-              </g>
-            ))}
+                  {/* 透明点击区域（固定宽度，不抖动） */}
+                  <line
+                    x1={link.x1} y1={link.y1}
+                    x2={link.x2} y2={link.y2}
+                    stroke="transparent"
+                    strokeWidth={8}
+                    style={{ cursor: "pointer" }}
+                    onMouseEnter={() => setHoveredLink(link.id)}
+                    onMouseLeave={() => setHoveredLink(null)}
+                  />
+                  {link.animated && (
+                    <line
+                      x1={link.x1} y1={link.y1}
+                      x2={link.x2} y2={link.y2}
+                      stroke={linkColor}
+                      strokeWidth={link.width}
+                      strokeOpacity={0.4}
+                      strokeDasharray="3,6"
+                      className="animate-dash"
+                      style={{ pointerEvents: "none" }}
+                    />
+                  )}
+                </g>
+              );
+            })}
           </g>
 
           {/* T-FS 连线 */}
           <g className="t-fs-links">
-            {tFsLinks.map((link) => (
-              <g key={link.id}>
-                {/* 可见线条 */}
-                <line
-                  x1={link.x1} y1={link.y1}
-                  x2={link.x2} y2={link.y2}
-                  stroke={LINK_COLORS["T-FS"]}
-                  strokeWidth={hoveredLink === link.id ? link.width + 1 : link.width}
-                  strokeOpacity={hoveredLink === link.id ? 1 : link.opacity}
-                  style={{ transition: "stroke-width 0.2s, stroke-opacity 0.2s", pointerEvents: "none" }}
-                />
-                {/* 透明点击区域（固定宽度，不抖动） */}
-                <line
-                  x1={link.x1} y1={link.y1}
-                  x2={link.x2} y2={link.y2}
-                  stroke="transparent"
-                  strokeWidth={8}
-                  style={{ cursor: "pointer" }}
-                  onMouseEnter={() => setHoveredLink(link.id)}
-                  onMouseLeave={() => setHoveredLink(null)}
-                />
-                {link.animated && (
+            {tFsLinks.map((link) => {
+              const [s1, s2] = link.id.split("-");
+              // 根据颜色可见性过滤
+              if (!isLineVisible(s1, s2)) return null;
+              const linkColor = getLinkColorFromBubbles(s1, s2, bubbles);
+              return (
+                <g key={link.id}>
+                  {/* 可见线条 */}
                   <line
                     x1={link.x1} y1={link.y1}
                     x2={link.x2} y2={link.y2}
-                    stroke={LINK_COLORS["T-FS"]}
-                    strokeWidth={link.width}
-                    strokeOpacity={0.4}
-                    strokeDasharray="3,6"
-                    className="animate-dash"
-                    style={{ pointerEvents: "none" }}
+                    stroke={linkColor}
+                    strokeWidth={hoveredLink === link.id ? link.width + 1 : link.width}
+                    strokeOpacity={hoveredLink === link.id ? 1 : link.opacity}
+                    style={{ transition: "stroke 0.3s, stroke-width 0.2s, stroke-opacity 0.2s", pointerEvents: "none" }}
                   />
-                )}
-              </g>
-            ))}
+                  {/* 透明点击区域（固定宽度，不抖动） */}
+                  <line
+                    x1={link.x1} y1={link.y1}
+                    x2={link.x2} y2={link.y2}
+                    stroke="transparent"
+                    strokeWidth={8}
+                    style={{ cursor: "pointer" }}
+                    onMouseEnter={() => setHoveredLink(link.id)}
+                    onMouseLeave={() => setHoveredLink(null)}
+                  />
+                  {link.animated && (
+                    <line
+                      x1={link.x1} y1={link.y1}
+                      x2={link.x2} y2={link.y2}
+                      stroke={linkColor}
+                      strokeWidth={link.width}
+                      strokeOpacity={0.4}
+                      strokeDasharray="3,6"
+                      className="animate-dash"
+                      style={{ pointerEvents: "none" }}
+                    />
+                  )}
+                </g>
+              );
+            })}
           </g>
 
           {/* T1 节点 (第一列) - 带标签 */}
@@ -414,7 +475,11 @@ export function TTFSGraph({
           {hoveredInfo ? formatSensorPairLabel(hoveredInfo.id.split("-")[0], hoveredInfo.id.split("-")[1]) : "—"}
         </span>
         <span className="ml-2 text-bright">r = {hoveredInfo?.r.toFixed(4) || "0.0000"}</span>
-        <span className="ml-2" style={{ color: hoveredInfo ? LINK_COLORS[hoveredInfo.type as keyof typeof LINK_COLORS] : "#666" }}>
+        <span className="ml-2" style={{
+          color: hoveredInfo
+            ? getLinkColorFromBubbles(hoveredInfo.id.split("-")[0], hoveredInfo.id.split("-")[1], bubbles)
+            : "#666"
+        }}>
           [{hoveredInfo?.type || "T-FS"}]
         </span>
       </div>

@@ -37,6 +37,7 @@ interface AlertPair {
   sensor2: string;
   cav: number;
   status?: string;
+  color?: string;  // 后端返回的颜色（与气泡墙一致）
 }
 
 // 根据状态获取连线颜色（与气泡墙颜色一致）
@@ -296,7 +297,8 @@ export function MineMap({
 
           if (!pos1 || !pos2) return null;
 
-          const color = getStatusColor(pair.status);
+          // 直接使用后端返回的颜色（与气泡墙、左侧飞线一致）
+          const color = pair.color || getStatusColor(pair.status);
           // 使用排序后的传感器对作为稳定 key
           const stableKey = [pair.sensor1, pair.sensor2].sort().join("-");
 

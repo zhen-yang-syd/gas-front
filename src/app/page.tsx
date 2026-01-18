@@ -85,6 +85,8 @@ interface PredictionData {
   prediction: number[];
   trend: "rising" | "falling" | "stable";
   confidence: number;
+  upper_bound?: number[];  // 95% 置信区间上界
+  lower_bound?: number[];  // 95% 置信区间下界
 }
 
 interface FlylinePair {
@@ -137,6 +139,13 @@ export default function Home() {
     normal: true,   // 蓝色 - 正常
     abnormal: true, // 黄色 - 异常
     warning: true,  // 红色 - 警告
+  });
+
+  // 左侧关联图连线颜色可见性（独立控制）
+  const [graphLineVisibility, setGraphLineVisibility] = useState({
+    normal: true,
+    abnormal: true,
+    warning: true,
   });
 
   // 累积传感器历史数据（用于实时预测曲线）
@@ -223,6 +232,8 @@ export default function Home() {
             prediction: data.prediction || [],
             trend: data.trend || "stable",
             confidence: data.confidence || 0.5,
+            upper_bound: data.upper_bound,  // 95% 置信区间上界
+            lower_bound: data.lower_bound,  // 95% 置信区间下界
           });
         } else if (localHistory.length >= 10) {
           // 即使API失败，也显示本地历史数据
@@ -489,7 +500,7 @@ export default function Home() {
               </Link>
               <button
                 onClick={() => setShowDxfModal(true)}
-                className="industrial-btn text-xs px-3 py-1.5 hover:border-accent"
+                className="industrial-btn text-xs px-3 py-1.5 hover:border-accent hidden"
               >
                 巷道图
               </button>
@@ -607,11 +618,47 @@ export default function Home() {
         <div className="grid grid-cols-12 gap-3 h-[calc(100vh-180px)]">
           {/* 左侧 - 两个关联图上下排列 */}
           <div className="col-span-3 flex flex-col gap-3">
+            {/* 连线颜色过滤器 - 独立控制 */}
+            <div className="flex items-center justify-between text-xs px-2 py-1.5 bg-slate-800/50 rounded">
+              <span className="text-slate-500">连线:</span>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={graphLineVisibility.normal}
+                    onChange={(e) => setGraphLineVisibility(prev => ({ ...prev, normal: e.target.checked }))}
+                    className="w-3 h-3 rounded accent-blue-500"
+                  />
+                  <span className="text-blue-400">正常</span>
+                </label>
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={graphLineVisibility.abnormal}
+                    onChange={(e) => setGraphLineVisibility(prev => ({ ...prev, abnormal: e.target.checked }))}
+                    className="w-3 h-3 rounded accent-yellow-500"
+                  />
+                  <span className="text-yellow-400">异常</span>
+                </label>
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={graphLineVisibility.warning}
+                    onChange={(e) => setGraphLineVisibility(prev => ({ ...prev, warning: e.target.checked }))}
+                    className="w-3 h-3 rounded accent-red-500"
+                  />
+                  <span className="text-red-400">警告</span>
+                </label>
+              </div>
+            </div>
+
             {/* T-T-WD 关联图 */}
             <div className="industrial-card flex-1 p-3">
               <TTWDGraph
                 tTCorrelations={correlations?.["T-T"]?.results || []}
                 tWdCorrelations={correlations?.["T-WD"]?.results || []}
+                bubbles={bubbleWall?.bubbles}
+                visibleLineColors={graphLineVisibility}
                 width={260}
                 height={280}
               />
@@ -622,6 +669,8 @@ export default function Home() {
               <TTFSGraph
                 tTCorrelations={correlations?.["T-T"]?.results || []}
                 tFsCorrelations={correlations?.["T-FS"]?.results || []}
+                bubbles={bubbleWall?.bubbles}
+                visibleLineColors={graphLineVisibility}
                 width={260}
                 height={280}
               />
@@ -743,7 +792,7 @@ export default function Home() {
                 </div>
                 <div className="overflow-y-auto h-[calc(100%-50px)] pr-1 custom-scrollbar">
                   {predictions.length > 0 ? (
-                    <PredictionGrid predictions={predictions} columns={1} chartHeight={140} />
+                    <PredictionGrid predictions={predictions} columns={1} chartHeight={180} />
                   ) : (
                     <div className="space-y-2">
                       {(sensorConfig?.available?.T?.slice(0, 6) || ["T010101", "T010102", "T010103", "T010104", "T010105", "T010106"]).map((sensor) => (

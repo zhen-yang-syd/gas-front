@@ -8,6 +8,8 @@ interface PredictionData {
   prediction: number[];
   trend: "rising" | "falling" | "stable";
   confidence: number;
+  upper_bound?: number[];  // 95% 置信区间上界
+  lower_bound?: number[];  // 95% 置信区间下界
 }
 
 interface PredictionGridProps {
@@ -53,6 +55,8 @@ export function PredictionGrid({
           prediction={pred.prediction}
           trend={pred.trend}
           confidence={pred.confidence}
+          upperBound={pred.upper_bound}
+          lowerBound={pred.lower_bound}
           height={chartHeight}
         />
       ))}

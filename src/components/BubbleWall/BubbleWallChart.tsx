@@ -4,12 +4,17 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { formatSensorPairLabel } from "@/lib/sensors";
 
+// 默认阈值（与后端 config.py 一致，基于文献 Wu et al. 2021-2025）
+const DEFAULT_ULV = 6.4247;  // 上限值
+const DEFAULT_CALV = 6.0;    // 控制限值
+const DEFAULT_LLV = 5.0634;  // 下限值
+
 interface BubbleWallChartProps {
   label: string;
   cav: number;
-  ulv: number;
-  llv: number;
-  isPairDynamic: boolean;
+  ulv: number;              // 上限值 (超过触发警告)
+  llv: number;              // 下限值 (低于触发异常偏低)
+  calv: number;             // 控制限值 (超过触发异常偏高)
   pairHistoryCount: number;
   changeMagnitude?: number; // 波动幅度
   hasData?: boolean;        // 是否有有效数据
@@ -26,13 +31,20 @@ interface BubbleWallChartProps {
  * - 两条水平线表示"墙" (ULV上墙, LLV下墙)
  * - 气泡位置反映CAV值相对于墙的位置
  * - 气泡颜色表示状态 (蓝=正常, 黄=异常, 红=警告)
+ *
+ * 阈值说明 (用户可配置):
+ * - ULV > CALV > LLV
+ * - CAV > ULV: 警告 (红色)
+ * - CAV > CALV: 异常偏高 (黄色)
+ * - CAV >= LLV: 正常 (蓝色)
+ * - CAV < LLV: 异常偏低 (浅黄色)
  */
 export function BubbleWallChart({
   label,
   cav,
   ulv,
   llv,
-  isPairDynamic,
+  calv = 6.0,  // 默认值防止 undefined
   pairHistoryCount,
   hasData = true,
   status,
@@ -52,10 +64,10 @@ export function BubbleWallChart({
     const wallBottom = 75; // LLV线Y坐标
     const wallHeight = wallBottom - wallTop;
 
-    // 安全检查：处理 NaN 或无效值
-    const safeCav = typeof cav === 'number' && !isNaN(cav) ? cav : 0.5;
-    const safeUlv = typeof ulv === 'number' && !isNaN(ulv) ? ulv : 0.95;
-    const safeLlv = typeof llv === 'number' && !isNaN(llv) ? llv : 0.85;
+    // 安全检查：处理 NaN 或无效值，使用文献定义的默认值
+    const safeCav = typeof cav === 'number' && !isNaN(cav) ? cav : (DEFAULT_ULV + DEFAULT_LLV) / 2;
+    const safeUlv = typeof ulv === 'number' && !isNaN(ulv) ? ulv : DEFAULT_ULV;
+    const safeLlv = typeof llv === 'number' && !isNaN(llv) ? llv : DEFAULT_LLV;
 
     // 防止除零：ulv === llv 时返回中间位置
     if (safeUlv <= safeLlv) {
@@ -69,24 +81,31 @@ export function BubbleWallChart({
     }
 
     // 超过上限: 气泡向上移动
+    // CAV 范围约 5-7，超出 0.5 算显著偏离
     if (safeCav > safeUlv) {
-      const excess = Math.min((safeCav - safeUlv) / 0.3, 1); // 最多移动到顶部
+      const excess = Math.min((safeCav - safeUlv) / 0.5, 1); // 最多移动到顶部
       return Math.max(8, wallTop - excess * 17);
     }
 
     // 低于下限: 气泡向下移动
-    const deficit = Math.min((safeLlv - safeCav) / 0.3, 1);
+    const deficit = Math.min((safeLlv - safeCav) / 0.5, 1);
     return Math.min(92, wallBottom + deficit * 17);
   }, [cav, ulv, llv]);
 
-  // 计算气泡半径 (基于CAV值，disabled状态使用固定小半径)
+  // 计算气泡半径 (基于CAV值相对于阈值范围，disabled状态使用固定小半径)
   const radius = useMemo(() => {
     if (isDisabled) return 10; // disabled 状态固定半径
     const minR = 8;
     const maxR = 16;
-    const normalized = Math.min(Math.max(cav, 0), 1);
+    // 将 CAV 归一化到 0-1（基于 LLV 和 ULV 范围）
+    const safeUlv = ulv ?? DEFAULT_ULV;
+    const safeLlv = llv ?? DEFAULT_LLV;
+    const range = safeUlv - safeLlv;
+    const normalized = range > 0
+      ? Math.min(Math.max((cav - safeLlv) / range, 0), 1)
+      : 0.5;
     return minR + normalized * (maxR - minR);
-  }, [cav, isDisabled]);
+  }, [cav, ulv, llv, isDisabled]);
 
   // 判断是否需要脉冲动画 (异常或警告状态，disabled不动画)
   const shouldPulse = !isDisabled && (status.includes("ABNORMAL") || status.includes("WARNING"));
@@ -177,17 +196,19 @@ export function BubbleWallChart({
                   CAV: <span className="text-white font-mono">{cav.toFixed(4)}</span>
                 </div>
                 <div className="pt-1 border-t border-slate-700 mt-1">
-                  <span className={isPairDynamic ? "text-green-400" : "text-slate-500"}>
-                    该对阈值 ({isPairDynamic ? "动态" : "默认"}):
-                  </span>
+                  <span className="text-slate-500">阈值 (在Input页面配置):</span>
                 </div>
                 <div>
-                  ULV: <span className="text-yellow-400 font-mono">{ulv.toFixed(4)}</span>
-                  {" "}(P75)
+                  ULV: <span className="text-red-400 font-mono">{ulv.toFixed(2)}</span>
+                  {" "}<span className="text-slate-500">(超过=警告)</span>
                 </div>
                 <div>
-                  LLV: <span className="text-blue-400 font-mono">{llv.toFixed(4)}</span>
-                  {" "}(P25)
+                  CALV: <span className="text-yellow-400 font-mono">{calv.toFixed(2)}</span>
+                  {" "}<span className="text-slate-500">(超过=异常)</span>
+                </div>
+                <div>
+                  LLV: <span className="text-blue-400 font-mono">{llv.toFixed(2)}</span>
+                  {" "}<span className="text-slate-500">(低于=异常)</span>
                 </div>
                 <div>
                   历史样本: <span className="text-slate-300 font-mono">{pairHistoryCount}</span>

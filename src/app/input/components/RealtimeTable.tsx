@@ -20,36 +20,10 @@ export const RealtimeTable: React.FC<RealtimeTableProps> = ({
   // 反转数据顺序：新数据在最上面
   const displayData = data.slice(-maxRows).reverse();
 
-  // 按类型分组传感器
+  // 按类型分组传感器（仅显示核心传感器：T, WD, FS）
   const tSensors = sensorNames.filter((s) => s.startsWith("T"));
   const wdSensors = sensorNames.filter((s) => s.startsWith("WD"));
   const fsSensors = sensorNames.filter((s) => s.startsWith("FS"));
-  const wySensors = sensorNames.filter((s) => s.startsWith("WY"));
-  const ylSensors = sensorNames.filter((s) => s.startsWith("YL"));
-  const coSensors = sensorNames.filter((s) => s.startsWith("CO"));
-  const sySensors = sensorNames.filter((s) => s.startsWith("SY"));
-  const llSensors = sensorNames.filter((s) => s.startsWith("LL"));
-
-  // 传感器阈值配置
-  const thresholds: Record<string, { warning: number; danger: number }> = {
-    WY: { warning: 3.0, danger: 10.0 },
-    YL: { warning: 15.0, danger: 25.0 },
-    CO: { warning: 0.5, danger: 1.5 },
-    SY: { warning: 0.6, danger: 1.2 },
-    LL: { warning: 5.0, danger: 20.0 },
-  };
-
-  // 根据传感器名和值获取样式类
-  const getValueClass = (name: string, value: number | null): string => {
-    if (value === null) return "text-dim";
-    const prefix = name.replace(/\d+$/, "");
-    const th = thresholds[prefix];
-    if (th) {
-      if (value > th.danger) return "text-err bg-danger/10";
-      if (value > th.warning) return "text-warn bg-warning/10";
-    }
-    return "";
-  };
 
   return (
     <div className="industrial-card p-4">
@@ -87,51 +61,6 @@ export const RealtimeTable: React.FC<RealtimeTableProps> = ({
                 <th
                   key={name}
                   className="text-center py-2 px-1 font-mono text-fs-sensor"
-                  title={name}
-                >
-                  {name}
-                </th>
-              ))}
-              {wySensors.map((name) => (
-                <th
-                  key={name}
-                  className="text-center py-2 px-1 font-mono text-purple-400"
-                  title={name}
-                >
-                  {name}
-                </th>
-              ))}
-              {ylSensors.map((name) => (
-                <th
-                  key={name}
-                  className="text-center py-2 px-1 font-mono text-orange-400"
-                  title={name}
-                >
-                  {name}
-                </th>
-              ))}
-              {coSensors.map((name) => (
-                <th
-                  key={name}
-                  className="text-center py-2 px-1 font-mono text-red-400"
-                  title={name}
-                >
-                  {name}
-                </th>
-              ))}
-              {sySensors.map((name) => (
-                <th
-                  key={name}
-                  className="text-center py-2 px-1 font-mono text-blue-400"
-                  title={name}
-                >
-                  {name}
-                </th>
-              ))}
-              {llSensors.map((name) => (
-                <th
-                  key={name}
-                  className="text-center py-2 px-1 font-mono text-teal-400"
                   title={name}
                 >
                   {name}
@@ -193,61 +122,6 @@ export const RealtimeTable: React.FC<RealtimeTableProps> = ({
                       {formatValue(row.sensors[name] ?? null)}
                     </td>
                   ))}
-                  {wySensors.map((name) => {
-                    const value = row.sensors[name] ?? null;
-                    return (
-                      <td
-                        key={name}
-                        className={`py-1.5 px-1 text-center font-mono text-purple-400 ${getValueClass(name, value)}`}
-                      >
-                        {formatValue(value)}
-                      </td>
-                    );
-                  })}
-                  {ylSensors.map((name) => {
-                    const value = row.sensors[name] ?? null;
-                    return (
-                      <td
-                        key={name}
-                        className={`py-1.5 px-1 text-center font-mono text-orange-400 ${getValueClass(name, value)}`}
-                      >
-                        {formatValue(value)}
-                      </td>
-                    );
-                  })}
-                  {coSensors.map((name) => {
-                    const value = row.sensors[name] ?? null;
-                    return (
-                      <td
-                        key={name}
-                        className={`py-1.5 px-1 text-center font-mono text-red-400 ${getValueClass(name, value)}`}
-                      >
-                        {formatValue(value)}
-                      </td>
-                    );
-                  })}
-                  {sySensors.map((name) => {
-                    const value = row.sensors[name] ?? null;
-                    return (
-                      <td
-                        key={name}
-                        className={`py-1.5 px-1 text-center font-mono text-blue-400 ${getValueClass(name, value)}`}
-                      >
-                        {formatValue(value)}
-                      </td>
-                    );
-                  })}
-                  {llSensors.map((name) => {
-                    const value = row.sensors[name] ?? null;
-                    return (
-                      <td
-                        key={name}
-                        className={`py-1.5 px-1 text-center font-mono text-teal-400 ${getValueClass(name, value)}`}
-                      >
-                        {formatValue(value)}
-                      </td>
-                    );
-                  })}
                 </tr>
               ))
             )}

@@ -377,7 +377,6 @@ export const AIRFLOW_ARROWS: Array<{ from: [number, number]; to: [number, number
  *       它们的斜线已在 DIAGONAL_LINES 中定义
  *       只有 U 形工作面4 是封闭区域需要填充
  */
-export const WORKING_FACES = [
-  // 工作面4 (U形上部) - 唯一需要填充的封闭区域
-  { points: "520,290 440,290 440,320 530,320", zone: 2 },
+export const WORKING_FACES: Array<{ points: string; zone: number }> = [
+  // 已移除工作面4的特殊背景标记
 ];

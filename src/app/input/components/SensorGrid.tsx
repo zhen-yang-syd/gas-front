@@ -9,15 +9,10 @@ interface SensorGridProps {
 }
 
 export const SensorGrid: React.FC<SensorGridProps> = ({ sensors }) => {
-  // 按前缀分组
+  // 按前缀分组（仅显示核心传感器：T, WD, FS）
   const tSensors = sensors.filter((s) => s.name.startsWith("T"));
   const wdSensors = sensors.filter((s) => s.name.startsWith("WD"));
   const fsSensors = sensors.filter((s) => s.name.startsWith("FS"));
-  const wySensors = sensors.filter((s) => s.name.startsWith("WY"));
-  const ylSensors = sensors.filter((s) => s.name.startsWith("YL"));
-  const coSensors = sensors.filter((s) => s.name.startsWith("CO"));
-  const sySensors = sensors.filter((s) => s.name.startsWith("SY"));
-  const llSensors = sensors.filter((s) => s.name.startsWith("LL"));
 
   const getStatusClass = (status: SensorStatus["status"]) => {
     switch (status) {
@@ -48,7 +43,7 @@ export const SensorGrid: React.FC<SensorGridProps> = ({ sensors }) => {
           <div className="flex flex-wrap gap-2">
             {groupSensors.map((sensor) => {
               const valueText =
-                sensor.value !== null ? formatValue(sensor.value) : "无数据";
+                sensor.value !== null ? formatValue(sensor.value) : "--";
               const statusText = getStatusText(sensor.status);
 
               return (
@@ -87,15 +82,10 @@ export const SensorGrid: React.FC<SensorGridProps> = ({ sensors }) => {
     <div className="industrial-card p-4">
       <div className="industrial-title text-xs mb-4">传感器状态网格</div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {renderSensorGroup("T (Gas/瓦斯)", tSensors, "text-ok")}
         {renderSensorGroup("WD (温度)", wdSensors, "text-note")}
         {renderSensorGroup("FS (风速)", fsSensors, "text-fs-sensor")}
-        {renderSensorGroup("WY (位移)", wySensors, "text-purple-400")}
-        {renderSensorGroup("YL (应力)", ylSensors, "text-orange-400")}
-        {renderSensorGroup("CO (一氧化碳)", coSensors, "text-red-400")}
-        {renderSensorGroup("SY (水压)", sySensors, "text-blue-400")}
-        {renderSensorGroup("LL (流量)", llSensors, "text-teal-400")}
       </div>
 
       {/* 图例 */}

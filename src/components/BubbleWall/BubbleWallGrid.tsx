@@ -1,17 +1,22 @@
 "use client";
 
 import { useMemo, useState, useRef, useEffect, useCallback } from "react";
+// Note: removed dynamic threshold toggle - thresholds are now user-configured via Input page
 import { motion, AnimatePresence } from "framer-motion";
 import { BubbleWallChart } from "./BubbleWallChart";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// 默认阈值（与后端 config.py 一致）
+const DEFAULT_CALV = 6.0;    // 控制限值 - 超过触发异常偏高
+
 interface BubbleData {
   label: string;
   cav: number;
-  ulv: number;
-  llv: number;
-  is_pair_dynamic: boolean;
+  ulv?: number;               // 上限值 (超过触发警告)
+  llv?: number;               // 下限值 (低于触发异常偏低)
+  calv?: number;              // 控制限值 (超过触发异常偏高)
+  is_pair_dynamic?: boolean;  // 保留兼容 (始终为 false)
   pair_history_count: number;
   change_magnitude?: number;  // 波动幅度
   historical_avg?: number;    // 历史平均值
@@ -26,8 +31,10 @@ interface BubbleData {
 interface GlobalThresholds {
   ulv: number;
   llv: number;
+  calv?: number;              // 控制限值 (可能旧数据没有)
   default_ulv: number;
   default_llv: number;
+  default_calv?: number;
   is_dynamic: boolean;
   is_using_dynamic: boolean;
   total_history: number;
@@ -46,29 +53,27 @@ interface BubbleWallGridProps {
 // 类型过滤选项
 type TypeFilter = "all" | "T-T" | "T-WD" | "T-FS";
 
-// 固定阈值（文献定义）
-const FIXED_ULV = 0.7;
-const FIXED_LLV = 0.4;
-
 /**
  * 气泡墙图网格组件
  *
- * 支持显示全部756对传感器，按波动幅度排序
- * 使用虚拟滚动优化大量卡片的渲染性能
+ * 阈值由用户在 Input 页面配置: ULV > CALV > LLV
+ * 状态判定:
+ * - CAV > ULV: 警告 (红色)
+ * - CAV > CALV: 异常偏高 (黄色)
+ * - CAV >= LLV: 正常 (蓝色)
+ * - CAV < LLV: 异常偏低 (浅黄色)
  */
 export function BubbleWallGrid({
   bubbles,
   globalThresholds,
   maxDisplay,  // 如果不传，显示全部
-  columns: _columns = 5,
 }: BubbleWallGridProps) {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [showOnlyWithData, setShowOnlyWithData] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 气泡墙设置开关
-  const [useDynamicThreshold, setUseDynamicThreshold] = useState(true);  // 动态阈值开关
-  const [enableAutoSort, setEnableAutoSort] = useState(false);  // 自动排序开关（默认关闭）
+  // 自动排序开关
+  const [enableAutoSort, setEnableAutoSort] = useState(false);
 
   // 初始化时从后端获取设置
   useEffect(() => {
@@ -77,7 +82,6 @@ export function BubbleWallGrid({
         const res = await fetch(`${API_BASE}/api/control/bubble-wall/settings`);
         if (res.ok) {
           const data = await res.json();
-          setUseDynamicThreshold(data.dynamic_threshold);
           setEnableAutoSort(data.sort_by_volatility);
         }
       } catch (e) {
@@ -87,33 +91,22 @@ export function BubbleWallGrid({
     fetchSettings();
   }, []);
 
-  // 更新后端设置
-  const updateSettings = useCallback(async (dynamicThreshold: boolean, sortEnabled: boolean) => {
+  // 切换自动排序开关
+  const handleSortToggle = useCallback(async (enabled: boolean) => {
+    setEnableAutoSort(enabled);
     try {
       await fetch(`${API_BASE}/api/control/bubble-wall/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          dynamic_threshold: dynamicThreshold,
-          sort_by_volatility: sortEnabled,
+          dynamic_threshold: false,
+          sort_by_volatility: enabled,
         }),
       });
     } catch (e) {
       console.warn("Failed to update bubble wall settings:", e);
     }
   }, []);
-
-  // 切换动态阈值开关
-  const handleThresholdToggle = useCallback((enabled: boolean) => {
-    setUseDynamicThreshold(enabled);
-    updateSettings(enabled, enableAutoSort);
-  }, [enableAutoSort, updateSettings]);
-
-  // 切换自动排序开关
-  const handleSortToggle = useCallback((enabled: boolean) => {
-    setEnableAutoSort(enabled);
-    updateSettings(useDynamicThreshold, enabled);
-  }, [useDynamicThreshold, updateSettings]);
 
   // 类型颜色
   const typeColors: Record<string, string> = {
@@ -237,32 +230,15 @@ export function BubbleWallGrid({
       {/* 气泡墙设置开关 */}
       <div className="flex items-center justify-between text-xs flex-wrap gap-2 px-2 py-1.5 bg-slate-800/50 rounded">
         <div className="flex items-center gap-4">
-          {/* 阈值模式开关 */}
-          <div className="flex items-center gap-1.5">
+          {/* 当前阈值显示 */}
+          <div className="flex items-center gap-2 text-slate-400">
             <span className="text-slate-500">阈值:</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={useDynamicThreshold}
-              onClick={() => handleThresholdToggle(!useDynamicThreshold)}
-              className={`relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                useDynamicThreshold ? "bg-blue-600" : "bg-slate-600"
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                  useDynamicThreshold ? "translate-x-3" : "translate-x-0"
-                }`}
-              />
-            </button>
-            <span className={useDynamicThreshold ? "text-blue-400" : "text-slate-400"}>
-              {useDynamicThreshold ? "动态" : "固定"}
+            <span className="font-mono text-[10px]">
+              ULV=<span className="text-red-400">{(globalThresholds.ulv ?? 6.42).toFixed(2)}</span>
+              {" "}CALV=<span className="text-yellow-400">{(globalThresholds.calv ?? 6.0).toFixed(2)}</span>
+              {" "}LLV=<span className="text-blue-400">{(globalThresholds.llv ?? 5.06).toFixed(2)}</span>
             </span>
-            {!useDynamicThreshold && (
-              <span className="text-slate-500 font-mono text-[10px]">
-                (ULV={FIXED_ULV}, LLV={FIXED_LLV})
-              </span>
-            )}
+            <span className="text-slate-600 text-[10px]">(在 Input 页面配置)</span>
           </div>
 
           {/* 自动排序开关 */}
@@ -273,7 +249,7 @@ export function BubbleWallGrid({
               role="switch"
               aria-checked={enableAutoSort}
               onClick={() => handleSortToggle(!enableAutoSort)}
-              className={`relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                 enableAutoSort ? "bg-green-600" : "bg-slate-600"
               }`}
             >
@@ -340,9 +316,9 @@ export function BubbleWallGrid({
                   <BubbleWallChart
                     label={bubble.label}
                     cav={bubble.cav}
-                    ulv={useDynamicThreshold ? bubble.ulv : FIXED_ULV}
-                    llv={useDynamicThreshold ? bubble.llv : FIXED_LLV}
-                    isPairDynamic={useDynamicThreshold && bubble.is_pair_dynamic}
+                    ulv={bubble.ulv ?? globalThresholds.ulv}
+                    llv={bubble.llv ?? globalThresholds.llv}
+                    calv={bubble.calv ?? globalThresholds.calv ?? DEFAULT_CALV}
                     pairHistoryCount={bubble.pair_history_count}
                     changeMagnitude={bubble.change_magnitude}
                     hasData={bubble.has_data}
@@ -364,26 +340,17 @@ export function BubbleWallGrid({
 
       {/* 全局阈值参考信息 */}
       <div className="pt-2 border-t border-slate-700 space-y-1">
-        {/* 全局参考值显示 */}
+        {/* 阈值说明 */}
         <div className="flex flex-wrap justify-center gap-3 text-xs text-slate-400">
-          <span className="text-slate-500">
-            {useDynamicThreshold ? "动态阈值:" : "固定阈值:"}
+          <span className="font-mono">
+            CAV &gt; <span className="text-red-400">ULV ({(globalThresholds.ulv ?? 6.42).toFixed(2)})</span> = 警告
           </span>
           <span className="font-mono">
-            ULV = <span className="text-yellow-400">
-              {useDynamicThreshold ? globalThresholds.ulv.toFixed(3) : FIXED_ULV.toFixed(1)}
-            </span>
+            CAV &gt; <span className="text-yellow-400">CALV ({(globalThresholds.calv ?? 6.0).toFixed(2)})</span> = 异常
           </span>
           <span className="font-mono">
-            LLV = <span className="text-blue-400">
-              {useDynamicThreshold ? globalThresholds.llv.toFixed(3) : FIXED_LLV.toFixed(1)}
-            </span>
+            CAV &gt;= <span className="text-blue-400">LLV ({(globalThresholds.llv ?? 5.06).toFixed(2)})</span> = 正常
           </span>
-          {useDynamicThreshold && (
-            <span className="text-slate-500">
-              ({globalThresholds.total_history} 样本)
-            </span>
-          )}
         </div>
       </div>
     </div>

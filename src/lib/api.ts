@@ -184,6 +184,9 @@ export const analysisApi = {
       confidence: number;
       trend: "rising" | "falling" | "stable";
       timestamps: { history: string[]; prediction: string[] };
+      upper_bound?: number[];  // 95% 置信区间上界
+      lower_bound?: number[];  // 95% 置信区间下界
+      error_std?: number;      // 预测误差标准差
       error?: string;
     }>(`/api/analysis/prediction/${sensorId}`),
 

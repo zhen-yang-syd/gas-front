@@ -13,6 +13,8 @@ interface PredictionChartProps {
   prediction: number[];
   trend?: "rising" | "falling" | "stable";
   confidence?: number;
+  upperBound?: number[];  // 95% 置信区间上界
+  lowerBound?: number[];  // 95% 置信区间下界
   height?: number;
 }
 
@@ -31,21 +33,32 @@ export function PredictionChart({
   prediction,
   trend = "stable",
   confidence = 0.5,
+  upperBound,
+  lowerBound,
   height = 160,
 }: PredictionChartProps) {
   const option = useMemo(() => {
     const historyLen = history.length;
     const predictionLen = prediction.length;
 
-    // 计算数据范围（用于动态Y轴，确保曲线不贴底）
-    const allValues = [...history, ...prediction].filter(v => v !== null && v !== undefined);
-    const minVal = allValues.length > 0 ? Math.min(...allValues) : 0;
-    const maxVal = allValues.length > 0 ? Math.max(...allValues) : 1;
-    const range = maxVal - minVal;
-    // 确保至少有 15% 或 0.02 的边距，防止曲线贴底
-    const padding = Math.max(range * 0.15, 0.02);
-    const yMin = Math.max(0, minVal - padding);
-    const yMax = Math.max(yMin + 0.1, maxVal + padding);
+    // 计算数据范围（用于动态Y轴，放大小幅波动的视觉效果）
+    // 包含置信区间上下界，确保带子完全可见
+    const allValues = [
+      ...history,
+      ...prediction,
+      ...(upperBound || []),
+      ...(lowerBound || [])
+    ].filter(v => v !== null && v !== undefined);
+    const dataMin = allValues.length > 0 ? Math.min(...allValues) : 0;
+    const dataMax = allValues.length > 0 ? Math.max(...allValues) : 1;
+    const dataRange = dataMax - dataMin;
+    // 紧贴数据范围，padding 只给 10%，让波动占满图表高度
+    // 最小 padding 0.005 防止数据完全平坦时 Y 轴范围为 0
+    const padding = Math.max(dataRange * 0.1, 0.005);
+    // Y 轴最小值：紧贴数据下界，但不低于 0
+    const yMin = Math.max(0, dataMin - padding);
+    // Y 轴最大值：紧贴数据上界，不强制到 0.9（让波动放大显示）
+    const yMax = dataMax + padding;
 
     // 生成时间标签（相对时间）
     const xAxisData = [
@@ -82,6 +95,26 @@ export function PredictionChart({
 
     // 固定阈值线
     const thresholdValue = 0.8;
+
+    // 95% 置信区间数据（带子形式，跟随预测线形状）
+    // 上界数据：历史部分为 null，预测部分为 upperBound
+    const upperBoundData = upperBound && upperBound.length > 0
+      ? [
+          ...Array(historyLen - 1).fill(null),
+          upperBound[0],  // 连接点使用第一个上界值
+          ...upperBound,
+        ]
+      : [];
+    // 下界数据：历史部分为 null，预测部分为 lowerBound
+    const lowerBoundData = lowerBound && lowerBound.length > 0
+      ? [
+          ...Array(historyLen - 1).fill(null),
+          lowerBound[0],  // 连接点使用第一个下界值
+          ...lowerBound,
+        ]
+      : [];
+    // 是否有置信区间数据
+    const hasConfidenceBand = upperBoundData.length > 0 && lowerBoundData.length > 0;
 
     return {
       backgroundColor: "transparent",
@@ -185,8 +218,8 @@ export function PredictionChart({
               ],
             },
           },
-          // 阈值标注线 (0.8)
-          markLine: {
+          // 阈值标注线 (0.8) - 只在 Y 轴范围包含阈值时显示
+          markLine: yMax >= thresholdValue ? {
             silent: true,
             symbol: "none",
             data: [
@@ -205,7 +238,20 @@ export function PredictionChart({
                 },
               },
             ],
-          },
+          } : undefined,
+          // 阈值以上区域红色警示背景
+          markArea: yMax >= thresholdValue ? {
+            silent: true,
+            data: [
+              [
+                { yAxis: thresholdValue },
+                { yAxis: yMax },
+              ],
+            ],
+            itemStyle: {
+              color: "rgba(239, 68, 68, 0.15)",  // 红色半透明
+            },
+          } : undefined,
         },
         {
           name: "预测",
@@ -260,9 +306,101 @@ export function PredictionChart({
             ],
           } : undefined,
         },
+        // 95% 置信区间带（使用差值堆叠实现带子效果）
+        // 下界线（基础层，透明填充到底部）
+        ...(hasConfidenceBand ? [{
+          name: "95%下界",
+          type: "line" as const,
+          data: lowerBoundData,
+          lineStyle: {
+            color: "rgba(139, 92, 246, 0.6)",
+            width: 1.5,
+            type: "dashed" as const,
+          },
+          itemStyle: { color: "rgba(139, 92, 246, 0.6)" },
+          symbol: "none",
+          smooth: 0.3,
+          stack: "confidence",
+          areaStyle: {
+            color: "transparent",  // 下界以下透明
+          },
+          z: 1,
+          // 下界 tag 标注（在末端显示，用透明点承载标签）
+          markPoint: {
+            symbol: "circle",
+            symbolSize: 1,
+            data: [{
+              coord: [historyLen + predictionLen - 1, lowerBound![lowerBound!.length - 1]],
+              itemStyle: { color: "transparent" },
+              label: {
+                show: true,
+                position: "left",
+                formatter: `下界: ${lowerBound![lowerBound!.length - 1].toFixed(3)}`,
+                color: "#A78BFA",
+                fontSize: 9,
+                backgroundColor: "rgba(30, 41, 59, 0.9)",
+                padding: [2, 4],
+                borderRadius: 2,
+              },
+            }],
+          },
+        }] : []),
+        // 差值带（堆叠在下界上，显示紫色填充）
+        ...(hasConfidenceBand ? [{
+          name: "置信带",
+          type: "line" as const,
+          // 数据是上界与下界的差值
+          data: upperBoundData.map((upper, i) => {
+            const lower = lowerBoundData[i];
+            if (upper === null || lower === null) return null;
+            return upper - lower;  // 差值
+          }),
+          lineStyle: { width: 0 },  // 不显示差值线
+          symbol: "none",
+          smooth: 0.3,
+          stack: "confidence",  // 堆叠在下界上
+          areaStyle: {
+            color: "rgba(139, 92, 246, 0.3)",  // 紫色半透明带子
+          },
+          z: 0,
+        }] : []),
+        // 上界线（虚线边框）
+        ...(hasConfidenceBand ? [{
+          name: "95%上界",
+          type: "line" as const,
+          data: upperBoundData,
+          lineStyle: {
+            color: "rgba(139, 92, 246, 0.6)",
+            width: 1.5,
+            type: "dashed" as const,
+          },
+          itemStyle: { color: "rgba(139, 92, 246, 0.6)" },
+          symbol: "none",
+          smooth: 0.3,
+          z: 2,
+          // 上界 tag 标注（在末端显示，用透明点承载标签）
+          markPoint: {
+            symbol: "circle",
+            symbolSize: 1,
+            data: [{
+              coord: [historyLen + predictionLen - 1, upperBound![upperBound!.length - 1]],
+              itemStyle: { color: "transparent" },
+              label: {
+                show: true,
+                position: "left",
+                formatter: `上界: ${upperBound![upperBound!.length - 1].toFixed(3)}`,
+                color: "#A78BFA",
+                fontSize: 9,
+                backgroundColor: "rgba(30, 41, 59, 0.9)",
+                padding: [2, 4],
+                borderRadius: 2,
+              },
+            }],
+          },
+        }] : []),
       ],
     };
-  }, [sensorId, history, prediction, trend]);
+  }, [sensorId, history, prediction, trend, upperBound, lowerBound]);
 
   // 趋势信息
   const trendInfo = useMemo(() => {
