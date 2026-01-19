@@ -1,6 +1,5 @@
 "use client";
 
-
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { healthCheck, analysisApi } from "@/lib/api";

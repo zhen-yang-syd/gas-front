@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { formatSensorPairLabel } from "@/lib/sensors";
 
 // 默认阈值（与后端 config.py 一致，基于文献 Wu et al. 2021-2025）
 const DEFAULT_ULV = 6.4247;  // 上限值
-const DEFAULT_CALV = 6.0;    // 控制限值
 const DEFAULT_LLV = 5.0634;  // 下限值
 
 interface BubbleWallChartProps {
@@ -44,14 +43,17 @@ export function BubbleWallChart({
   cav,
   ulv,
   llv,
-  calv = 6.0,  // 默认值防止 undefined
-  pairHistoryCount,
+  calv: _calv = 6.0,  // 保留接口兼容，组件内不使用
+  pairHistoryCount: _pairHistoryCount,  // 保留接口兼容，组件内不使用
   hasData = true,
   status,
   color,
   sensorType = "T-T",
   typeColor = "#06B6D4",
 }: BubbleWallChartProps) {
+  // 标记未使用变量（接口要求但组件内不使用）
+  void _calv;
+  void _pairHistoryCount;
   // 判断是否为 disabled 状态（无数据或 cav=0）
   const isDisabled = hasData === false || cav === 0;
 
@@ -127,12 +129,8 @@ export function BubbleWallChart({
     below: boolean;
   } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const [isMounted, setIsMounted] = useState(false);
-
-  // 客户端挂载检测（Portal 需要）
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  // 客户端挂载检测（Portal 需要）- 直接检测 window 存在性
+  const isMounted = typeof window !== "undefined";
 
   // 计算 CAV 相对于阈值的位置描述
   const cavPosition = useMemo(() => {
@@ -172,7 +170,7 @@ export function BubbleWallChart({
       {/* Hover Tooltip - 使用 Portal 渲染到 body，避免被容器 overflow 裁剪 */}
       {isHovered && isMounted && tooltipPos && createPortal(
         <div
-          className="fixed z-[9999] px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg shadow-xl text-xs whitespace-nowrap pointer-events-none"
+          className="fixed z-9999 px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg shadow-xl text-xs whitespace-nowrap pointer-events-none"
           style={{
             left: tooltipPos.x,
             top: tooltipPos.y,
@@ -195,9 +193,6 @@ export function BubbleWallChart({
                 <div>
                   CAV: <span className="text-white font-mono">{cav.toFixed(4)}</span>
                 </div>
-                <div className="pt-1 border-t border-slate-700 mt-1">
-                  <span className="text-slate-500">阈值 (在Input页面配置):</span>
-                </div>
                 <div>
                   ULV: <span className="text-red-400 font-mono">{ulv.toFixed(2)}</span>
                   {" "}<span className="text-slate-500">(超过=警告)</span>
@@ -205,9 +200,6 @@ export function BubbleWallChart({
                 <div>
                   LLV: <span className="text-blue-400 font-mono">{llv.toFixed(2)}</span>
                   {" "}<span className="text-slate-500">(低于=异常)</span>
-                </div>
-                <div>
-                  历史样本: <span className="text-slate-300 font-mono">{pairHistoryCount}</span>
                 </div>
                 <div className="pt-1 border-t border-slate-700 mt-1">
                   位置: <span className="text-slate-300">{cavPosition}</span>

@@ -42,22 +42,20 @@ const CORE_SENSOR_NAMES = [
   "FS010301", "FS010302",
 ];
 
-// 扩展传感器名称（WY, YL, CO, SY, LL）- 预留接口，暂无数据
-const EXTENSIBLE_SENSOR_NAMES = [
-  // WY传感器 (3个) - 位移
-  "WY010101", "WY010102", "WY010103",
-  // YL传感器 (3个) - 应力
-  "YL010101", "YL010102", "YL010103",
-  // CO传感器 (3个) - 一氧化碳
-  "CO010101", "CO010102", "CO010103",
-  // SY传感器 (2个) - 水压
-  "SY010101", "SY010102",
-  // LL传感器 (2个) - 流量
-  "LL010101", "LL010102",
+// 扩展传感器名称 - 占位传感器（暂无数据，显示--）
+const EXTENDED_SENSOR_NAMES = [
+  // 第二行：CO₂ / O₂ / CO
+  "CO2-1", "CO2-2", "CO2-3", "CO2-4",  // CO₂传感器
+  "O2-1", "O2-2", "O2-3", "O2-4",      // O₂传感器
+  "CO-1", "CO-2", "CO-3", "CO-4",      // CO传感器
+  // 第三行：Gas Pressure / 粉尘(FC) / C₂H₂(乙炔)
+  "GP1", "GP2", "GP3", "GP4",          // Gas Pressure
+  "FC1", "FC2",                         // 粉尘(FC)
+  "YH1", "YH2", "YH3",                  // C₂H₂(乙炔)
 ];
 
 // 所有传感器名称
-const ALL_SENSOR_NAMES = [...CORE_SENSOR_NAMES, ...EXTENSIBLE_SENSOR_NAMES];
+const ALL_SENSOR_NAMES = [...CORE_SENSOR_NAMES, ...EXTENDED_SENSOR_NAMES];
 
 export default function InputPage() {
   // API连接状态
@@ -326,9 +324,9 @@ export default function InputPage() {
             }
           });
 
-          // 新记录追加到前面（不去重，每批数据都保留）
+          // 每批数据替换上一批（不累积）
           if (newRecords.length > 0) {
-            setCavHistory((prev) => [...newRecords, ...prev]);
+            setCavHistory(newRecords);
           }
         } catch (e) {
           console.error("Failed to parse analysis SSE data:", e);

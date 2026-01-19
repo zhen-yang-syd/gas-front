@@ -87,7 +87,7 @@ export function PredictionChart({
     const trendColors: Record<string, string> = {
       rising: "#EF4444",   // 红色 - 上升趋势（危险）
       falling: "#10B981",  // 绿色 - 下降趋势（安全）
-      stable: "#F59E0B",   // 橙色 - 稳定
+      stable: "#A855F7",   // 紫色 - 稳定（与置信区间呼应）
     };
 
     // 当前值
@@ -413,7 +413,7 @@ export function PredictionChart({
     const colors: Record<string, string> = {
       rising: "text-red-400",
       falling: "text-green-400",
-      stable: "text-yellow-400",
+      stable: "text-purple-400",
     };
     const labels: Record<string, string> = {
       rising: "上升",
