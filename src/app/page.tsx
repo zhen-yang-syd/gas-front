@@ -25,6 +25,7 @@ interface Bubble {
   status_cn: string;
   color: string;
   label: string;
+  has_data: boolean;  // 是否有有效数据（|r| >= 0.3）
 }
 
 interface BubbleWallData {
@@ -89,20 +90,10 @@ interface PredictionData {
   lower_bound?: number[];  // 95% 置信区间下界
 }
 
-interface FlylinePair {
-  sensor1: string;
-  sensor2: string;
-  cav: number;
-  status: string;
-  color: string;
-  type: string;
-}
-
 export default function Home() {
   const [apiStatus, setApiStatus] = useState<"loading" | "connected" | "error">("loading");
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [bubbleWall, setBubbleWall] = useState<BubbleWallData | null>(null);
-  const [flylinePairs, setFlylinePairs] = useState<FlylinePair[]>([]);
   const [demoMode, setDemoMode] = useState<"idle" | "preparing" | "running">("idle");
   // 持久化相关性缓存 - 使用 Map 累积，连线建立后保留
   const [persistentCorrelations, setPersistentCorrelations] = useState<{
@@ -326,10 +317,8 @@ export default function Home() {
             setBubbleWall(data.bubble_wall);
           }
 
-          // 飞线数据：后端已过滤显著相关的传感器对（top 50，|r| >= 0.3）
-          if (data.flyline_pairs) {
-            setFlylinePairs(data.flyline_pairs);
-          }
+          // 飞线数据不再使用 flyline_pairs（有 TOP 50 限制）
+          // 改为直接从 bubble_wall 生成，与气泡墙卡片完全一致
 
           // 合并新相关性到持久化缓存（累积而非覆盖）
           if (data.correlations) {
@@ -454,7 +443,6 @@ export default function Home() {
     });
     // 清空气泡墙数据
     setBubbleWall(null);
-    setFlylinePairs([]);
     fetchStatus();
   };
 
@@ -485,9 +473,24 @@ export default function Home() {
     [sensorData]
   );
 
-  // 飞线数据：使用后端过滤的显著相关传感器对（top 50，|r| >= 0.3）
-  // 后端已按相关系数降序排序，前端直接使用
-  const alertPairs = flylinePairs;
+  // 飞线数据：直接从气泡墙生成，与气泡墙卡片完全一致
+  // 关键设计：气泡墙有颜色的配对 = 矿洞地图有连线，不再使用 flylinePairs（有 TOP 50 限制）
+  // 飞线数据：包含所有有数据的配对，颜色由 MineMap 从 bubbles 动态查找
+  // 显示/隐藏由 visibleLineColors 开关控制（正常/异常/警告）
+  const alertPairs = useMemo(() => {
+    if (!bubbleWall?.bubbles) return [];
+
+    return bubbleWall.bubbles
+      .filter(b => b.has_data)  // 包含所有有数据的配对（含 NORMAL）
+      .map(b => ({
+        sensor1: b.sensor_pair[0],
+        sensor2: b.sensor_pair[1],
+        cav: b.cav,
+        status: b.status,
+        color: b.color,
+        type: b.type,
+      }));
+  }, [bubbleWall]);
 
   return (
     <div className="min-h-screen bg-base">
@@ -731,6 +734,7 @@ export default function Home() {
                   sensorData={sensorData}
                   alertSensors={alertSensors}
                   alertPairs={alertPairs}
+                  bubbles={bubbleWall?.bubbles}
                   tlvThreshold={0.8}
                   showLabels={true}
                   visibleLineColors={lineColorVisibility}

@@ -9,6 +9,7 @@ import {
   SensorStatus,
   AppState,
 } from "./lib/types";
+import { AlarmRecord } from "./components/types";
 import { getSensorStatus, formatSystemTime } from "./lib/utils";
 import {
   RealtimeTable,
@@ -16,6 +17,7 @@ import {
   SensorGrid,
   ControlPanel,
   SystemStatusPanel,
+  AlarmHistory,
 } from "./components";
 
 // 默认配置
@@ -76,6 +78,7 @@ export default function InputPage() {
   // 数据状态
   const [tableData, setTableData] = useState<RowRecord[]>([]);
   const [cavHistory, setCavHistory] = useState<CavHistoryRecord[]>([]);
+  const [alarmHistory, setAlarmHistory] = useState<AlarmRecord[]>([]);
   const [sensorStatuses, setSensorStatuses] = useState<SensorStatus[]>([]);
 
   // 初始化：获取后端状态和历史数据
@@ -298,13 +301,31 @@ export default function InputPage() {
 
           // 遍历 bubble_wall.bubbles，为每个有告警/预警状态的气泡创建记录
           const bubbles = data.bubble_wall?.bubbles ?? [];
+          const sensorReadings = data.sensor_readings ?? {};
           const timestamp = formatSystemTime();
           const baseTime = Date.now();
 
-          const newRecords: CavHistoryRecord[] = [];
-          bubbles.forEach((bubble: { status?: string; sensor_pair?: [string, string]; type?: string; cav?: number }, idx: number) => {
+          // 定义 bubble 类型
+          interface BubbleData {
+            status?: string;
+            sensor_pair?: [string, string];
+            type?: string;
+            cav?: number;
+            ulv?: number;
+            llv?: number;
+            calv?: number;
+          }
+
+          const newCavRecords: CavHistoryRecord[] = [];
+          const newAlarmRecords: AlarmRecord[] = [];
+
+          bubbles.forEach((bubble: BubbleData, idx: number) => {
             const status = bubble.status as string;
             if (status && status !== "NORMAL") {
+              const sensorPair = bubble.sensor_pair as [string, string];
+              const [sensor1, sensor2] = sensorPair;
+
+              // CAV 历史记录
               let level: "normal" | "warning" | "alarm" = "normal";
               if (status.includes("WARNING")) {
                 level = "alarm";
@@ -312,21 +333,56 @@ export default function InputPage() {
                 level = "warning";
               }
 
-              newRecords.push({
+              newCavRecords.push({
                 id: `cav-${baseTime}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
                 time: timestamp,
-                sensorPair: bubble.sensor_pair as [string, string],
+                sensorPair,
                 pairType: bubble.type as string,
                 cav: bubble.cav as number,
                 status: status,
                 level,
               });
+
+              // 告警历史记录（累积，不替换）
+              const cav = bubble.cav ?? 0;
+              const ulv = bubble.ulv ?? 6.4247;
+              const llv = bubble.llv ?? 5.0634;
+              const calv = bubble.calv ?? 6.0;
+
+              // 确定告警原因
+              let reason = "";
+              if (cav > ulv) {
+                reason = "CAV > ULV";
+              } else if (cav < llv) {
+                reason = "CAV < LLV";
+              } else if (status.includes("ABNORMAL")) {
+                reason = "异常波动";
+              }
+
+              newAlarmRecords.push({
+                id: `alarm-${baseTime}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
+                time: timestamp,
+                sensorPair: `${sensor1}-${sensor2}`,
+                sensor1Value: sensorReadings[sensor1] ?? 0,
+                sensor2Value: sensorReadings[sensor2] ?? 0,
+                cav,
+                ulv,
+                llv,
+                calv,
+                reason,
+                status: status.includes("WARNING") ? "alert" : "warning",
+              });
             }
           });
 
-          // 每批数据替换上一批（不累积）
-          if (newRecords.length > 0) {
-            setCavHistory(newRecords);
+          // CAV 历史：每批数据替换上一批（不累积）
+          if (newCavRecords.length > 0) {
+            setCavHistory(newCavRecords);
+          }
+
+          // 告警历史：累积追加（始终保持历史记录）
+          if (newAlarmRecords.length > 0) {
+            setAlarmHistory((prev) => [...newAlarmRecords, ...prev].slice(0, DEFAULT_MAX_ALARMS));
           }
         } catch (e) {
           console.error("Failed to parse analysis SSE data:", e);
@@ -373,6 +429,7 @@ export default function InputPage() {
       await controlApi.reset();
       setTableData([]);
       setCavHistory([]);
+      setAlarmHistory([]);  // 清空告警历史
       setCurrentIndex(0);
       setRuntime(0);
       setAppState("stopped");
@@ -505,8 +562,11 @@ export default function InputPage() {
           maxRows={DEFAULT_MAX_TABLE_ROWS}
         />
 
-        {/* CAV 实时历史 */}
-        <CavHistory records={cavHistory} />
+        {/* CAV 实时历史 - 已隐藏，使用下方的 AlarmHistory 替代 */}
+        {/* <CavHistory records={cavHistory} /> */}
+
+        {/* 告警历史记录 */}
+        <AlarmHistory alarms={alarmHistory} maxAlarms={DEFAULT_MAX_ALARMS} />
 
         {/* 传感器状态网格 */}
         <SensorGrid sensors={sensorStatuses} />

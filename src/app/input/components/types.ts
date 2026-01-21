@@ -4,13 +4,22 @@ export interface RowRecord {
   sensors: Record<string, number | null>;
 }
 
-// 告警记录（表格形式）
+// 告警记录（表格形式）- 扩展支持传感器对告警
 export interface AlarmRecord {
   id: string;
   time: string;
-  sensor: string;
-  value: number;
-  rule: string;
+  // 传感器对信息
+  sensorPair: string;        // "T1-T2"
+  sensor1Value: number;      // T1 当前值
+  sensor2Value: number;      // T2 当前值
+  // CAV 阈值
+  cav: number;
+  ulv: number;
+  llv: number;
+  calv: number;
+  // 告警详情
+  reason: string;            // "cav > ulv" | "cav < llv" | "源数据超tlv"
+  status: "warning" | "alert";
 }
 
 // 预警记录

@@ -40,12 +40,37 @@ interface AlertPair {
   color?: string;  // 后端返回的颜色（与气泡墙一致）
 }
 
-// 根据状态获取连线颜色（与气泡墙颜色一致）
-function getStatusColor(status?: string): string {
-  if (!status) return "#3B82F6"; // 蓝色 - 正常
-  if (status.includes("WARNING")) return "#EF4444"; // 红色 - 警告
-  if (status.includes("ABNORMAL")) return "#EAB308"; // 黄色 - 异常
-  return "#3B82F6"; // 蓝色 - 正常
+interface Bubble {
+  sensor_pair: string[];
+  status: string;
+  color: string;
+  has_data: boolean;
+}
+
+// 默认颜色（蓝色 - 正常/无数据）
+const DEFAULT_LINK_COLOR = "#3B82F6";
+
+// 从气泡墙数据中动态查找传感器对的颜色（与关联图一致）
+function getLinkColorFromBubbles(
+  sensor1: string,
+  sensor2: string,
+  bubbles?: Bubble[]
+): { color: string; status: string } {
+  if (!bubbles || bubbles.length === 0) {
+    return { color: DEFAULT_LINK_COLOR, status: "NORMAL" };
+  }
+
+  // 在 bubbles 中查找匹配的传感器对
+  const bubble = bubbles.find((b) => {
+    const [s1, s2] = b.sensor_pair;
+    return (s1 === sensor1 && s2 === sensor2) || (s1 === sensor2 && s2 === sensor1);
+  });
+
+  // 返回气泡墙中定义的颜色和状态
+  return {
+    color: bubble?.color || DEFAULT_LINK_COLOR,
+    status: bubble?.status || "NORMAL",
+  };
 }
 
 // 巷道线条样式
@@ -62,6 +87,7 @@ interface MineMapProps {
   sensorData?: SensorData;
   alertSensors?: string[];
   alertPairs?: AlertPair[];
+  bubbles?: Bubble[];  // 气泡墙数据，用于动态查找颜色（与关联图一致）
   tlvThreshold?: number;
   showLabels?: boolean;
   visibleLineColors?: LineColorVisibility;
@@ -76,6 +102,7 @@ export function MineMap({
   sensorData = {},
   alertSensors = [],
   alertPairs = [],
+  bubbles,
   tlvThreshold = 0.8,
   showLabels = true,
   visibleLineColors = { normal: true, abnormal: true, warning: true },
@@ -277,28 +304,29 @@ export function MineMap({
     </g>
   );
 
-  // 根据颜色可见性过滤飞线
-  const isLineVisible = (status?: string): boolean => {
-    if (!status) return visibleLineColors.normal;
+  // 根据颜色可见性过滤飞线（从气泡墙动态查找状态）
+  const isLineVisible = (sensor1: string, sensor2: string): boolean => {
+    const { status } = getLinkColorFromBubbles(sensor1, sensor2, bubbles);
     if (status.includes("WARNING")) return visibleLineColors.warning;
     if (status.includes("ABNORMAL")) return visibleLineColors.abnormal;
     return visibleLineColors.normal;
   };
 
   // 渲染飞线 - 显示所有传感器对的连线
-  // 关键改进：使用传感器对作为稳定的 key，避免抖动
+  // 关键改进：从气泡墙动态查找颜色，确保与气泡墙卡片和关联图一致
   const renderFlylines = () => (
     <g className="flylines">
       {alertPairs
-        .filter((pair) => isLineVisible(pair.status))
+        .filter((pair) => isLineVisible(pair.sensor1, pair.sensor2))
         .map((pair) => {
           const pos1 = getSensorPosition(pair.sensor1);
           const pos2 = getSensorPosition(pair.sensor2);
 
           if (!pos1 || !pos2) return null;
 
-          // 直接使用后端返回的颜色（与气泡墙、左侧飞线一致）
-          const color = pair.color || getStatusColor(pair.status);
+          // 从气泡墙动态查找颜色（与关联图 TTWDGraph 一致）
+          // 这确保阈值变更后颜色能即时更新
+          const { color } = getLinkColorFromBubbles(pair.sensor1, pair.sensor2, bubbles);
           // 使用排序后的传感器对作为稳定 key
           const stableKey = [pair.sensor1, pair.sensor2].sort().join("-");
 
