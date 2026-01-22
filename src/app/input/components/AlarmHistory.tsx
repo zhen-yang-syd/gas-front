@@ -5,16 +5,12 @@ import { AlarmRecord } from "./types";
 
 interface AlarmHistoryProps {
   alarms: AlarmRecord[];
-  maxAlarms: number;
 }
 
 export const AlarmHistory: React.FC<AlarmHistoryProps> = ({
   alarms,
-  maxAlarms,
 }) => {
-  const displayAlarms = alarms.slice(-maxAlarms);
-
-  // 统计告警和预警数量
+  // 统计告警和预警数量（累计统计所有记录）
   const alertCount = alarms.filter(a => a.status === "alert").length;
   const warningCount = alarms.filter(a => a.status === "warning").length;
 
@@ -29,8 +25,8 @@ export const AlarmHistory: React.FC<AlarmHistoryProps> = ({
         </div>
       </div>
 
-      <div className="overflow-auto max-h-72 custom-scrollbar">
-        {displayAlarms.length === 0 ? (
+      <div className="overflow-auto max-h-96 custom-scrollbar">
+        {alarms.length === 0 ? (
           <div className="py-8 text-center text-dim text-xs">暂无告警记录</div>
         ) : (
           <table className="w-full text-xs">
@@ -48,7 +44,7 @@ export const AlarmHistory: React.FC<AlarmHistoryProps> = ({
               </tr>
             </thead>
             <tbody>
-              {displayAlarms.map((alarm) => (
+              {alarms.map((alarm) => (
                 <tr
                   key={alarm.id}
                   className={`border-b border-edge/50 hover:bg-tertiary/30 ${

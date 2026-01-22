@@ -81,6 +81,7 @@ export default function InputPage() {
   const [alarmHistory, setAlarmHistory] = useState<AlarmRecord[]>([]);
   const [sensorStatuses, setSensorStatuses] = useState<SensorStatus[]>([]);
 
+
   // 初始化：获取后端状态和历史数据
   useEffect(() => {
     const initStatus = async () => {
@@ -324,8 +325,9 @@ export default function InputPage() {
             if (status && status !== "NORMAL") {
               const sensorPair = bubble.sensor_pair as [string, string];
               const [sensor1, sensor2] = sensorPair;
+              const pairKey = `${sensor1}-${sensor2}`;
 
-              // CAV 历史记录
+              // CAV 历史记录（每批替换）
               let level: "normal" | "warning" | "alarm" = "normal";
               if (status.includes("WARNING")) {
                 level = "alarm";
@@ -343,7 +345,7 @@ export default function InputPage() {
                 level,
               });
 
-              // 告警历史记录（累积，不替换）
+              // 告警历史记录（增量追加：每批数据的所有告警都记录）
               const cav = bubble.cav ?? 0;
               const ulv = bubble.ulv ?? 6.4247;
               const llv = bubble.llv ?? 5.0634;
@@ -355,6 +357,8 @@ export default function InputPage() {
                 reason = "CAV > ULV";
               } else if (cav < llv) {
                 reason = "CAV < LLV";
+              } else if (cav > calv) {
+                reason = "CAV > CALV";
               } else if (status.includes("ABNORMAL")) {
                 reason = "异常波动";
               }
@@ -362,7 +366,7 @@ export default function InputPage() {
               newAlarmRecords.push({
                 id: `alarm-${baseTime}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
                 time: timestamp,
-                sensorPair: `${sensor1}-${sensor2}`,
+                sensorPair: pairKey,
                 sensor1Value: sensorReadings[sensor1] ?? 0,
                 sensor2Value: sensorReadings[sensor2] ?? 0,
                 cav,
@@ -380,9 +384,9 @@ export default function InputPage() {
             setCavHistory(newCavRecords);
           }
 
-          // 告警历史：累积追加（始终保持历史记录）
+          // 告警历史：增量追加（保留所有历史记录，不限制数量）
           if (newAlarmRecords.length > 0) {
-            setAlarmHistory((prev) => [...newAlarmRecords, ...prev].slice(0, DEFAULT_MAX_ALARMS));
+            setAlarmHistory((prev) => [...newAlarmRecords, ...prev]);
           }
         } catch (e) {
           console.error("Failed to parse analysis SSE data:", e);
@@ -566,7 +570,7 @@ export default function InputPage() {
         {/* <CavHistory records={cavHistory} /> */}
 
         {/* 告警历史记录 */}
-        <AlarmHistory alarms={alarmHistory} maxAlarms={DEFAULT_MAX_ALARMS} />
+        <AlarmHistory alarms={alarmHistory} />
 
         {/* 传感器状态网格 */}
         <SensorGrid sensors={sensorStatuses} />
