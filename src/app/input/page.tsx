@@ -350,32 +350,47 @@ export default function InputPage() {
               const ulv = bubble.ulv ?? 6.4247;
               const llv = bubble.llv ?? 5.0634;
               const calv = bubble.calv ?? 6.0;
+              const s1Val = sensorReadings[sensor1] ?? 0;
+              const s2Val = sensorReadings[sensor2] ?? 0;
 
-              // 确定告警原因
-              let reason = "";
+              // 判定1: ULV/LLV 边界判定
               if (cav > ulv) {
-                reason = "CAV > ULV";
+                newAlarmRecords.push({
+                  id: `alarm-${baseTime}-${idx}-ulv-${Math.random().toString(36).slice(2, 8)}`,
+                  time: timestamp,
+                  sensorPair: pairKey,
+                  sensor1Value: s1Val,
+                  sensor2Value: s2Val,
+                  cav, ulv, llv, calv,
+                  reason: "CAV > ULV",
+                  status: "alert",
+                });
               } else if (cav < llv) {
-                reason = "CAV < LLV";
-              } else if (cav > calv) {
-                reason = "CAV > CALV";
-              } else if (status.includes("ABNORMAL")) {
-                reason = "异常波动";
+                newAlarmRecords.push({
+                  id: `alarm-${baseTime}-${idx}-llv-${Math.random().toString(36).slice(2, 8)}`,
+                  time: timestamp,
+                  sensorPair: pairKey,
+                  sensor1Value: s1Val,
+                  sensor2Value: s2Val,
+                  cav, ulv, llv, calv,
+                  reason: "CAV < LLV",
+                  status: "alert",
+                });
               }
 
-              newAlarmRecords.push({
-                id: `alarm-${baseTime}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
-                time: timestamp,
-                sensorPair: pairKey,
-                sensor1Value: sensorReadings[sensor1] ?? 0,
-                sensor2Value: sensorReadings[sensor2] ?? 0,
-                cav,
-                ulv,
-                llv,
-                calv,
-                reason,
-                status: status.includes("WARNING") ? "alert" : "warning",
-              });
+              // 判定2: CALV 控制限判定（独立判定，可与判定1同时触发）
+              if (cav > calv) {
+                newAlarmRecords.push({
+                  id: `alarm-${baseTime}-${idx}-calv-${Math.random().toString(36).slice(2, 8)}`,
+                  time: timestamp,
+                  sensorPair: pairKey,
+                  sensor1Value: s1Val,
+                  sensor2Value: s2Val,
+                  cav, ulv, llv, calv,
+                  reason: "CAV > CALV",
+                  status: "warning",
+                });
+              }
             }
           });
 
